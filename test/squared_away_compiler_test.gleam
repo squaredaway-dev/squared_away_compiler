@@ -1,3 +1,5 @@
+import gleam/bit_array
+import squared_away_compiler/chunkify
 import gleam/io
 import squared_away_compiler/typechecker
 import squared_away_compiler/parser
@@ -10,6 +12,6 @@ pub fn main() {
   let assert Ok(src) = simplifile.read("./test/assets/basics.csv")
   let assert Ok(toks) = src |> scanner.scan
   let assert #(parsed, []) = toks |> parser.parse
-  let #(typechecked, errors) = parsed |> typechecker.typecheck |> io.debug
-  io.debug(typechecked)
+  let assert #(typechecked, []) = parsed |> typechecker.typecheck
+  typechecked |> chunkify.chunkify |> bit_array.inspect |> io.debug
 }

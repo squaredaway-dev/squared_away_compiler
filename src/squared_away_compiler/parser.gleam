@@ -102,10 +102,7 @@ fn do_parse(
 
       case leading_token, rest {
         // Leading with a comma or newline just means it's an empty cell
-        scanner.Token(type_: scanner.Comma, ..), _ -> do_parse(rest, state, acc)
-
-        scanner.Token(type_: scanner.Newline, ..), _ ->
-          do_parse(rest, state, acc)
+        scanner.Token(type_: scanner.Comma, ..), _ | scanner.Token(type_: scanner.Newline, ..), _ -> do_parse(rest, state, acc)
 
         // Variable declarations
         scanner.Token(
@@ -133,13 +130,23 @@ fn do_parse(
               ])
           }
 
-        // Don't know how to handle this token here. Need to fast forward to the next comma
-        // or newline to reset and keep parsing
-        tok, _ -> {
-          let end = #(tok.row, tok.col)
-          let new_state = error(state, UnexpectedToken(tok), Span(start:, end:))
-          let toks = fast_forward_past_next_comma_or_newline(toks)
-          do_parse(toks, new_state, acc)
+        _, _ -> {
+          // Could just be an expression
+          case parse_expr(toks) {
+            // Failed to parse an expression following the comma/newline.
+            Error(_) -> {
+              let end = #(leading_token.row, leading_token.col)
+              let new_state = error(state, UnexpectedToken(leading_token), Span(start:, end:))
+              let toks = fast_forward_past_next_comma_or_newline(toks)
+              do_parse(toks, new_state, acc)
+            }
+            Ok(#(expr, rest)) -> {
+              do_parse(rest, state, [
+                ExpressionStatement(expr, sets: #(leading_token.row, leading_token.col)),
+                ..acc
+              ])
+            }
+          }
         }
       }
     }
