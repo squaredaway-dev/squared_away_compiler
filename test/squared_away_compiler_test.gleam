@@ -1,3 +1,4 @@
+import squared_away_compiler/vm
 import gleam/bit_array
 import squared_away_compiler/chunkify
 import gleam/io
@@ -13,5 +14,6 @@ pub fn main() {
   let assert Ok(toks) = src |> scanner.scan
   let assert #(parsed, []) = toks |> parser.parse
   let assert #(typechecked, []) = parsed |> typechecker.typecheck
-  typechecked |> chunkify.chunkify |> bit_array.inspect |> io.debug
+  let bytecode = typechecked |> chunkify.chunkify
+  vm.eval(bytecode) |> io.debug
 }

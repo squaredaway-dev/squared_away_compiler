@@ -6,10 +6,20 @@ import gleam/io
 import squared_away_compiler/typechecker
 
 // OP Codes are starting off as u8's
-const op_sets_bool = <<1:int>>
+const op_sets_bool = 1
+const op_sets_integer = 2
+const op_sets_float = 3
+
+// The op codes for setting variables are the same as for setting cells only,
+// just shifted by twenty.
+const op_sets_bool_variable = 21
 
 pub fn chunkify(stmts: List(typechecker.TypedStatement)) -> BitArray {
     do_chunkify(stmts, bytes_tree.new())
+}
+
+type ChunkifyState {
+    ChunkifyState
 }
 
 fn do_chunkify(stmts: List(typechecker.TypedStatement), acc: bytes_tree.BytesTree) -> BitArray {
@@ -17,26 +27,42 @@ fn do_chunkify(stmts: List(typechecker.TypedStatement), acc: bytes_tree.BytesTre
         // Base Case: Done chunkifying
         [] -> acc |> bytes_tree.to_bit_array
 
+        // Variable Statement (always preceded by the expression stmt for the cell it points to)
+        [typechecker.ExpressionStatement(inner:, sets:), typechecker.VariableDefinition(lexeme:, points_to:), ..rest] -> {
+            let #(row, col) = points_to
+            let assert <<sets_op:int, expr_bytes:bits>> = chunkify_expression_statement(inner, sets)
+            let new_sets_op = sets_op + 20
+            do_chunkify(rest, acc |> bytes_tree.prepend(<<new_sets_op:int, lexeme:utf8>>) |> bytes_tree.prepend(expr_bytes))
+        }
+
         // Expression Statements
         [typechecker.ExpressionStatement(inner:, sets:), ..rest] -> {
-            // Let's just start with literals shall we
-            case inner {
-              typechecker.BooleanLiteral(_, value) -> {
-                let acc = acc |> bytes_tree.prepend(encode_boolean(value)) |> bytes_tree.prepend(encode_sets(op_sets_bool, sets))
-                do_chunkify(rest, acc)
+            let expr_bytes = chunkify_expression_statement(inner, sets)
+            do_chunkify(rest, acc |> bytes_tree.prepend(expr_bytes))
+        }
+        
+        _ as rest -> panic as { "Internal compiler error. Don't know how to chunkify " <> string.inspect(rest) <> " yet" }
+    }
+}
+
+fn chunkify_expression_statement(te: typechecker.TypedExpression, sets: #(Int, Int)) -> BitArray {
+    let #(row, col) = sets
+    case te {
+              typechecker.BooleanLiteral(_, value:) -> {
+                let bool_encoding = case value {
+                  False -> 0
+                  True -> 1
+                }
+                <<op_sets_bool:int, row:int, col:int, bool_encoding:int>>
               }
-              typechecker.FloatLiteral(_, _) -> todo
-              typechecker.IntegerLiteral(_, _) -> todo
+              typechecker.FloatLiteral(_, value:) -> <<op_sets_float:int, row:int, col:int, value:float>>
+              typechecker.IntegerLiteral(_, value:) -> <<op_sets_integer:int, row:int, col:int, value:int>>
               typechecker.PercentLiteral(_, _) -> todo
               typechecker.StringLiteral(_, _) -> todo
               typechecker.UsdLiteral(_, _) -> todo
 
               _ -> todo
             }
-        }
-        
-        _ as rest -> panic as { "Internal compiler error. Don't know how to chunkify " <> string.inspect(rest) <> " yet" }
-    }
 }
 
 fn encode_boolean(x: Bool) -> BitArray {
