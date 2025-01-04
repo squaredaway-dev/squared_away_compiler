@@ -6,13 +6,13 @@ import gleam/io
 import squared_away_compiler/typechecker
 
 // OP Codes are starting off as u8's
-const op_sets_bool = 1
-const op_sets_integer = 2
-const op_sets_float = 3
+pub const op_sets_bool = 1
+pub const op_sets_integer = 2
+pub const op_sets_float = 3
 
 // The op codes for setting variables are the same as for setting cells only,
 // just shifted by twenty.
-const op_sets_bool_variable = 21
+pub const op_sets_bool_variable = 21
 
 pub fn chunkify(stmts: List(typechecker.TypedStatement)) -> BitArray {
     do_chunkify(stmts, bytes_tree.new())
@@ -32,7 +32,8 @@ fn do_chunkify(stmts: List(typechecker.TypedStatement), acc: bytes_tree.BytesTre
             let #(row, col) = points_to
             let assert <<sets_op:int, expr_bytes:bits>> = chunkify_expression_statement(inner, sets)
             let new_sets_op = sets_op + 20
-            do_chunkify(rest, acc |> bytes_tree.prepend(<<new_sets_op:int, lexeme:utf8>>) |> bytes_tree.prepend(expr_bytes))
+            let len_lexeme = string.byte_size(lexeme)
+            do_chunkify(rest, acc |> bytes_tree.append(<<new_sets_op:int, len_lexeme:int, lexeme:utf8>>) |> bytes_tree.append(expr_bytes))
         }
 
         // Expression Statements
