@@ -12,6 +12,8 @@ pub const op_sets_integer = 2
 
 pub const op_sets_float = 3
 
+pub const op_sets_ident = 4
+
 // The op codes for setting variables are the same as for setting cells only,
 // just shifted by twenty.
 pub const op_sets_bool_variable = 21
@@ -47,7 +49,7 @@ fn do_chunkify(
         rest,
         acc
           |> bytes_tree.append(<<new_sets_op:int, len_lexeme:int, lexeme:utf8>>)
-          |> bytes_tree.append(expr_bytes),
+          |> bytes_tree.append(expr_bytes)
       )
     }
 

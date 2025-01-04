@@ -10,13 +10,13 @@ import gleam/json
 import gleam/list
 import gleam/pair
 import gleam/result
-import gleam/string
 import squared_away_compiler/chunkify
 
 pub type Value {
   BooleanValue(b: Bool)
   IntegerValue(n: Int)
   FloatValue(f: Float)
+  IdentValue(var: String)
 }
 
 fn value_to_string(v: Value) -> String {
@@ -28,6 +28,7 @@ fn value_to_string(v: Value) -> String {
       }
     FloatValue(f) -> float.to_string(f)
     IntegerValue(i) -> int.to_string(i)
+    IdentValue(s) -> s
   }
 }
 
@@ -41,7 +42,7 @@ type VmState {
 }
 
 fn init_vm_state() -> VmState {
-  VmState(output_format: Json, variable_vals: dict.new())
+  VmState(output_format: Csv, variable_vals: dict.new())
 }
 
 fn define_var(vm_state: VmState, lexeme: String, value: Value) -> VmState {
@@ -74,27 +75,31 @@ fn do_eval(
         Csv -> {
           // Build a csv from the cell values
           let keys = dict.keys(acc)
+
           let rows =
             list.map(keys, pair.first)
             |> list.max(int.compare)
             |> result.unwrap(or: 0)
+            
           let cols =
             list.map(keys, pair.second)
             |> list.max(int.compare)
             |> result.unwrap(or: 0)
+            
           let csv_bytes =
-            list.range(1, cols)
-            |> list.fold(bytes_tree.new(), fn(csv_acc, col) {
+            list.range(1, rows)
+            |> list.fold(bytes_tree.new(), fn(csv_acc, row) {
+
               let row =
-                list.range(1, rows)
-                |> list.fold(bytes_tree.new(), fn(csv_row_acc, row) {
+                list.range(1, cols)
+                |> list.fold(bytes_tree.new(), fn(csv_row_acc, col) {
                   case dict.get(acc, #(row, col)) {
                     // No output for this cell, append a comma
                     Error(_) -> csv_row_acc |> bytes_tree.append(<<",">>)
 
                     // There's a value for this cell, add it and then add a comma
                     Ok(v) -> {
-                      let v_str = case row == rows {
+                      let v_str = case col == cols {
                         True -> value_to_string(v) <> "\n"
                         False -> value_to_string(v) <> ","
                       }
@@ -190,7 +195,7 @@ fn do_eval(
               do_eval(
                 rest,
                 vm_state |> define_var(variable_name, BooleanValue(False)),
-                acc |> dict.insert(#(row, col), BooleanValue(False)),
+                acc |> dict.insert(#(row, col), BooleanValue(False)) |> dict.insert(#(row, col - 1), IdentValue(variable_name)),
               )
             }
             _ -> Error(InvalidOpCodeArguments(op_code, rest))
