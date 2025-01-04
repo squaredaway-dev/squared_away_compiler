@@ -37,10 +37,9 @@ fn do_chunkify(
     // Variable Statement (always preceded by the expression stmt for the cell it points to)
     [
       typechecker.ExpressionStatement(inner:, sets:),
-      typechecker.VariableDefinition(lexeme:, points_to:),
+      typechecker.VariableDefinition(lexeme:, points_to: _),
       ..rest
     ] -> {
-      let #(row, col) = points_to
       let assert <<sets_op:int, expr_bytes:bits>> =
         chunkify_expression_statement(inner, sets)
       let new_sets_op = sets_op + 20

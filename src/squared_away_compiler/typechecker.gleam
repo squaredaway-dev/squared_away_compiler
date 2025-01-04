@@ -17,6 +17,7 @@ pub type Typ {
   FloatType
   UsdType
   PercentType
+  TestResultType
 }
 
 /// An alias for a typed expression. I think this will be simpler/more maintainable 
@@ -63,7 +64,14 @@ pub type TypedStatement {
 pub type TypeErrorType {
   DuplicateVariableDefinition
   BinaryOperationAndRequiresBooleans(lhs_type: Typ, rhs_type: Typ)
+  BinaryOperationOrRequiresBooleans(lhs_type: Typ, rhs_type: Typ)
+  SlashRequiresCertainTypes(lhs_type: Typ, rhs_type: Typ)
   BangEqualRequiresSameTypesOnLeftAndRight(lhs_typ: Typ, rhs_type: Typ)
+  EqualEqualRequiresSameTypesOnLeftAndRight(lhs_typ: Typ, rhs_type: Typ)
+  MustBeRequiresSameTypesOnLeftAndRight(lhs_typ: Typ, rhs_type: Typ)
+  OrderingRequiresCertainTypesOnLeftAndRight(lhs_typ: Typ, rhs_type: Typ)
+  AdditionRequiresCertainTypesOnLeftAndRight(lhs_typ: Typ, rhs_type: Typ)
+  SubtractionRequiresCertainTypesOnLeftAndRight(lhs_typ: Typ, rhs_type: Typ)
   BangRequiresBoolean(inner_type: Typ)
   MinusRequiresDifferentType(inner_typ: Typ)
 }
@@ -267,36 +275,69 @@ fn typecheck_expression(
       }
 
       // This is where we define the giant list of what type combinations can be used with what binary operations
-      case op.type_ {
-        // And (&&) can only be used with booleans
-        scanner.And ->
-          case lhs_typed.type_, rhs_typed.type_ {
-            BooleanType, BooleanType -> resolve(BooleanType)
-            _, _ -> error(BinaryOperationAndRequiresBooleans)
-          }
+      case op.type_, lhs_typed.type_, rhs_typed.type_ {
 
-        // A `!=` can be used with any two types that are the same (Might remove float in the future and force a threshold comparison)
-        scanner.BangEqual ->
-          case lhs_typed.type_, rhs_typed.type_ {
-            a, b if a == b -> resolve(BooleanType)
-            _, _ -> error(BangEqualRequiresSameTypesOnLeftAndRight)
-          }
+        scanner.And, BooleanType, BooleanType -> resolve(BooleanType)
+        scanner.And, _, _ -> error(BinaryOperationAndRequiresBooleans)
 
-        scanner.EqualEqual -> todo
-        scanner.Greater -> todo
-        scanner.GreaterEqual -> todo
-        scanner.Less -> todo
-        scanner.LessEqual -> todo
-        scanner.Minus -> todo
-        scanner.MustBe -> todo
-        scanner.Or -> todo
-        scanner.Plus -> todo
-        scanner.Slash -> todo
-        scanner.Star -> todo
-        scanner.StarStar -> todo
+        scanner.Or, BooleanType, BooleanType -> resolve(BooleanType)
+        scanner.Or, _, _ -> error(BinaryOperationOrRequiresBooleans)
+
+        scanner.BangEqual, lhs_t, rhs_t if lhs_t == rhs_t -> resolve(BooleanType)
+        scanner.BangEqual, _, _ -> error(BangEqualRequiresSameTypesOnLeftAndRight)
+
+        scanner.EqualEqual, lhs_t, rhs_t if lhs_t == rhs_t -> resolve(BooleanType)
+        scanner.EqualEqual, _, _ -> error(EqualEqualRequiresSameTypesOnLeftAndRight)
+
+        scanner.Greater, FloatType, FloatType |
+        scanner.Greater, IntegerType, IntegerType |
+        scanner.Greater, PercentType, PercentType |
+        scanner.Greater, UsdType, UsdType -> resolve(BooleanType)
+        scanner.Greater, _, _ -> error(OrderingRequiresCertainTypesOnLeftAndRight)
+
+        scanner.GreaterEqual, FloatType, FloatType |
+        scanner.GreaterEqual, IntegerType, IntegerType |
+        scanner.GreaterEqual, PercentType, PercentType |
+        scanner.GreaterEqual, UsdType, UsdType -> resolve(BooleanType)
+        scanner.GreaterEqual, _, _ -> error(OrderingRequiresCertainTypesOnLeftAndRight)
+
+        scanner.Less, FloatType, FloatType |
+        scanner.Less, IntegerType, IntegerType |
+        scanner.Less, PercentType, PercentType |
+        scanner.Less, UsdType, UsdType -> resolve(BooleanType)
+        scanner.Less, _, _ -> error(OrderingRequiresCertainTypesOnLeftAndRight)
+
+        scanner.LessEqual, FloatType, FloatType |
+        scanner.LessEqual, IntegerType, IntegerType |
+        scanner.LessEqual, PercentType, PercentType |
+        scanner.LessEqual, UsdType, UsdType -> resolve(BooleanType)
+        scanner.LessEqual, _, _ -> error(OrderingRequiresCertainTypesOnLeftAndRight)
+
+        scanner.Minus, FloatType, FloatType |
+        scanner.Minus, IntegerType, IntegerType |
+        scanner.Minus, UsdType, UsdType -> resolve(lhs_typed.type_)
+        scanner.Minus, _, _ -> error(OrderingRequiresCertainTypesOnLeftAndRight)
+
+        scanner.Plus, FloatType, FloatType |
+        scanner.Plus, IntegerType, IntegerType |
+        scanner.Plus, UsdType, UsdType -> resolve(lhs_typed.type_)
+        scanner.Plus, _, _ -> error(OrderingRequiresCertainTypesOnLeftAndRight)
+
+        scanner.MustBe, lhs_t, rhs_t if lhs_t == rhs_t -> resolve(TestResultType)
+        scanner.MustBe, _, _ -> error(MustBeRequiresSameTypesOnLeftAndRight)
+
+        scanner.Slash, FloatType, FloatType -> resolve(FloatType)
+        scanner.Slash, IntegerType, IntegerType -> resolve(IntegerType)
+        scanner.Slash, UsdType, UsdType -> resolve(PercentType)
+        scanner.Slash, UsdType, PercentType -> resolve(UsdType)
+        scanner.Slash, PercentType, PercentType -> resolve(PercentType)
+        scanner.Slash, _, _ -> error(SlashRequiresCertainTypes)
+
+        scanner.Star, _, _ -> todo
+        scanner.StarStar, _, _ -> todo
 
         // Token is not a binary op. This is an internal compiler error.
-        _ -> panic as { "Expected binary op, got " <> string.inspect(op.type_) }
+        _, _, _ -> panic as { "Expected binary op, got " <> string.inspect(op.type_) }
       }
     }
 
