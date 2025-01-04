@@ -1,15 +1,34 @@
 //// The "VM", which evaluates the bytecode
 
-import gleam/string
 import gleam/bit_array
+import gleam/bytes_tree
 import gleam/dict
+import gleam/float
+import gleam/int
 import gleam/io
+import gleam/json
+import gleam/list
+import gleam/pair
+import gleam/result
+import gleam/string
 import squared_away_compiler/chunkify
 
 pub type Value {
   BooleanValue(b: Bool)
   IntegerValue(n: Int)
   FloatValue(f: Float)
+}
+
+fn value_to_string(v: Value) -> String {
+  case v {
+    BooleanValue(b) ->
+      case b {
+        False -> "false"
+        True -> "true"
+      }
+    FloatValue(f) -> float.to_string(f)
+    IntegerValue(i) -> int.to_string(i)
+  }
 }
 
 pub type RuntimeError {
@@ -22,7 +41,7 @@ type VmState {
 }
 
 fn init_vm_state() -> VmState {
-  VmState(output_format: Csv, variable_vals: dict.new())
+  VmState(output_format: Json, variable_vals: dict.new())
 }
 
 fn define_var(vm_state: VmState, lexeme: String, value: Value) -> VmState {
@@ -34,7 +53,7 @@ fn define_var(vm_state: VmState, lexeme: String, value: Value) -> VmState {
 
 type OutputFormat {
   Csv
-  // Json: Coming after Csv
+  Json
 }
 
 pub fn eval(bytecode: BitArray) -> Result(BitArray, RuntimeError) {
@@ -51,11 +70,59 @@ fn do_eval(
     // Base Case: Nothing more to evaluate
     <<>> -> {
       case vm_state.output_format {
+        // The CSV output format creates a CSV of the interpreted values
         Csv -> {
-          // For now, let's just print the cells and variables dictionaries
-          io.println("Variables " <> string.inspect(vm_state.variable_vals))
-          io.println("Cells" <> string.inspect(acc))
-          Ok(<<>>)
+          // Build a csv from the cell values
+          let keys = dict.keys(acc)
+          let rows =
+            list.map(keys, pair.first)
+            |> list.max(int.compare)
+            |> result.unwrap(or: 0)
+          let cols =
+            list.map(keys, pair.second)
+            |> list.max(int.compare)
+            |> result.unwrap(or: 0)
+          let csv_bytes =
+            list.range(1, cols)
+            |> list.fold(bytes_tree.new(), fn(csv_acc, col) {
+              let row =
+                list.range(1, rows)
+                |> list.fold(bytes_tree.new(), fn(csv_row_acc, row) {
+                  case dict.get(acc, #(row, col)) {
+                    // No output for this cell, append a comma
+                    Error(_) -> csv_row_acc |> bytes_tree.append(<<",">>)
+
+                    // There's a value for this cell, add it and then add a comma
+                    Ok(v) -> {
+                      let v_str = case row == rows {
+                        True -> value_to_string(v) <> "\n"
+                        False -> value_to_string(v) <> ","
+                      }
+
+                      csv_row_acc
+                      |> bytes_tree.append(v_str |> bit_array.from_string)
+                    }
+                  }
+                })
+
+              // Add the row to the sheet
+              csv_acc |> bytes_tree.append_tree(row)
+            })
+
+          Ok(csv_bytes |> bytes_tree.to_bit_array)
+        }
+
+        // The JSON format creates a JSON object with each Variable set as a field
+        Json -> {
+          let json =
+            vm_state.variable_vals
+            |> dict.map_values(fn(_, v) { value_to_string(v) |> json.string })
+            |> dict.to_list
+            |> json.object
+            |> json.to_string
+            |> bit_array.from_string
+
+          Ok(json)
         }
       }
     }

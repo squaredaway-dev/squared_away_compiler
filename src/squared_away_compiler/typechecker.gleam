@@ -6,8 +6,8 @@ import gleam/list
 import gleam/result
 import gleam/string
 import squared_away_compiler/parser
-import squared_away_compiler/scanner
 import squared_away_compiler/rational
+import squared_away_compiler/scanner
 
 /// The types of values in squared away.
 pub type Typ {

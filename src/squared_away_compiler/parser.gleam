@@ -10,8 +10,8 @@ import gleam/io
 import gleam/list
 import gleam/option
 import gleam/result
-import squared_away_compiler/scanner
 import squared_away_compiler/rational
+import squared_away_compiler/scanner
 
 pub type Statement {
   // A variable definition is done by putting an identifier in one cell and 
@@ -102,7 +102,9 @@ fn do_parse(
 
       case leading_token, rest {
         // Leading with a comma or newline just means it's an empty cell
-        scanner.Token(type_: scanner.Comma, ..), _ | scanner.Token(type_: scanner.Newline, ..), _ -> do_parse(rest, state, acc)
+        scanner.Token(type_: scanner.Comma, ..), _
+        | scanner.Token(type_: scanner.Newline, ..), _
+        -> do_parse(rest, state, acc)
 
         // Variable declarations
         scanner.Token(
@@ -136,13 +138,17 @@ fn do_parse(
             // Failed to parse an expression following the comma/newline.
             Error(_) -> {
               let end = #(leading_token.row, leading_token.col)
-              let new_state = error(state, UnexpectedToken(leading_token), Span(start:, end:))
+              let new_state =
+                error(state, UnexpectedToken(leading_token), Span(start:, end:))
               let toks = fast_forward_past_next_comma_or_newline(toks)
               do_parse(toks, new_state, acc)
             }
             Ok(#(expr, rest)) -> {
               do_parse(rest, state, [
-                ExpressionStatement(expr, sets: #(leading_token.row, leading_token.col)),
+                ExpressionStatement(expr, sets: #(
+                  leading_token.row,
+                  leading_token.col,
+                )),
                 ..acc
               ])
             }
@@ -370,5 +376,10 @@ fn fast_forward_past_next_comma_or_newline(
 const statement_delimeters = [scanner.Comma, scanner.Newline]
 
 const binary_operators = [
-  scanner.Plus, scanner.Minus, scanner.Star, scanner.StarStar, scanner.Slash, scanner.BangEqual
+  scanner.Plus,
+  scanner.Minus,
+  scanner.Star,
+  scanner.StarStar,
+  scanner.Slash,
+  scanner.BangEqual,
 ]
