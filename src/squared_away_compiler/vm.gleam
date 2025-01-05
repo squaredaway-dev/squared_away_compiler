@@ -56,10 +56,7 @@ fn define_var(vm_state: VmState, lexeme: String, value: Value) -> VmState {
 }
 
 fn set_cell(vm_state: VmState, cell: #(Int, Int), value: Value) -> VmState {
-  VmState(
-    ..vm_state,
-    cell_vals: dict.insert(vm_state.cell_vals, cell, value)
-  )
+  VmState(..vm_state, cell_vals: dict.insert(vm_state.cell_vals, cell, value))
 }
 
 pub fn vm_state_to_csv(state: VmState) -> BitArray {
@@ -108,10 +105,10 @@ pub fn vm_state_to_csv(state: VmState) -> BitArray {
 
 pub fn vm_state_to_json(state: VmState) -> String {
   state.variable_vals
-            |> dict.map_values(fn(_, v) { value_to_string(v) |> json.string })
-            |> dict.to_list
-            |> json.object
-            |> json.to_string
+  |> dict.map_values(fn(_, v) { value_to_string(v) |> json.string })
+  |> dict.to_list
+  |> json.object
+  |> json.to_string
 }
 
 pub fn eval(bytecode: BitArray) -> Result(VmState, RuntimeError) {
@@ -154,12 +151,9 @@ fn do_eval(
           case rest {
             <<row:int, col:int, n:int-size(64), rest:bytes>> -> {
               io.debug(n)
-              do_eval(
-                rest,
-                vm_state |> set_cell(#(row, col), IntegerValue(n)),
-              )
+              do_eval(rest, vm_state |> set_cell(#(row, col), IntegerValue(n)))
             }
-              
+
             _ -> Error(InvalidOpCodeArguments(op_code, rest))
           }
 
@@ -167,10 +161,7 @@ fn do_eval(
         _ if op_code == chunkify.op_sets_float ->
           case rest {
             <<row:int, col:int, f:float, rest:bytes>> ->
-              do_eval(
-                rest,
-                vm_state |> set_cell(#(row, col), FloatValue(f)),
-              )
+              do_eval(rest, vm_state |> set_cell(#(row, col), FloatValue(f)))
             _ -> Error(InvalidOpCodeArguments(op_code, rest))
           }
 
@@ -182,13 +173,20 @@ fn do_eval(
               lexeme:size(len_lexeme)-bytes,
               row:int,
               col:int,
-              0:int,
+              bool_val:int,
               rest:bytes,
             >> -> {
+              let value = case bool_val {
+                0 -> False
+                1 -> True
+                _ -> panic as "Unexpected opcode arguments"
+              }
               let assert Ok(variable_name) = bit_array.to_string(lexeme)
               do_eval(
                 rest,
-                vm_state |> define_var(variable_name, BooleanValue(False)) |> set_cell(#(row, col), BooleanValue(False))
+                vm_state
+                  |> define_var(variable_name, BooleanValue(value))
+                  |> set_cell(#(row, col), BooleanValue(value))
                   |> set_cell(#(row, col - 1), IdentValue(variable_name)),
               )
             }

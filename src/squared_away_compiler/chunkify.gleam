@@ -1,14 +1,17 @@
 //// This module will contain the code to pack a list of typechecked statements into it's instruction set
 
-import gleam/io
 import gleam/bytes_tree
+import gleam/io
 import gleam/string
 import squared_away_compiler/typechecker
 
 // OP Codes are starting off as u8's
 pub const op_sets_bool = 1
+
 pub const op_sets_integer = 2
+
 pub const op_sets_float = 3
+
 pub const op_sets_ident = 4
 
 // The op codes for setting variables are the same as for setting cells only,
@@ -45,7 +48,7 @@ fn do_chunkify(
         rest,
         acc
           |> bytes_tree.append(<<new_sets_op:int, len_lexeme:int, lexeme:utf8>>)
-          |> bytes_tree.append(expr_bytes)
+          |> bytes_tree.append(expr_bytes),
       )
     }
 
@@ -85,12 +88,7 @@ fn chunkify_expression_statement(
     >>
     typechecker.IntegerLiteral(_, value:) -> {
       io.debug(value)
-      <<
-      op_sets_integer:int,
-      row:int,
-      col:int,
-      value:int-size(64),
-    >>
+      <<op_sets_integer:int, row:int, col:int, value:int-size(64)>>
     }
     typechecker.PercentLiteral(_, _) -> todo
     typechecker.StringLiteral(_, _) -> todo
