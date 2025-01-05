@@ -1,11 +1,13 @@
 //// This module will contain the code to pack a list of typechecked statements into it's instruction set. 
 
+import squared_away_compiler/rational
 import gleam/bit_array
 import gleam/bytes_tree
 import gleam/int
 import gleam/list
 import gleam/string
 import squared_away_compiler/typechecker
+import bigi
 
 // We define our opcodes as constants. To understand their purpose and arguments, see the
 // `Operation` type. For now they are encoded as u8's until we need more.
@@ -23,6 +25,8 @@ pub const op_sets_string = 5
 pub const op_sets_variable = 6
 
 pub const op_def_variable = 7
+
+pub const op_sets_usd = 8
 
 type Cell =
   #(Int, Int)
@@ -44,6 +48,8 @@ pub type Operation {
 
   // Sets a cell to the value of a variable
   SetsVariable(cell: Cell, lexeme: String)
+
+  SetsUsd(cell: Cell, value: rational.Rat)
 
   // Defines a variable as pointing to a particular cell
   DefineVariable(lexeme: String, points_to: Cell)
@@ -82,6 +88,11 @@ pub fn encode(op: Operation) -> BitArray {
       encode_string(lexeme):bits,
       encode_cell(points_to):bits,
     >>
+    SetsUsd(cell:, value:) -> <<
+      op_sets_usd:int,
+      encode_cell(cell):bits,
+      encode_rational(value):bits
+    >>
   }
 }
 
@@ -96,6 +107,26 @@ fn unsafe_decode_cell(from: BitArray) -> #(Cell, BitArray) {
   case from {
     <<row:int, col:int, rest:bits>> -> #(#(row, col), rest)
     _ -> panic as "expected row and column encoded as u8s"
+  }
+}
+
+fn encode_rational(r: rational.Rat) -> BitArray {
+  let rational.Rat(n, d) = r 
+  let assert Ok(n_bytes) = bigi.to_bytes(n, bigi.LittleEndian, bigi.Signed, 10_000)
+  let n_len = bit_array.byte_size(n_bytes)
+  let assert Ok(d_bytes) = bigi.to_bytes(d, bigi.LittleEndian, bigi.Signed, 10_000)
+  let d_len = bit_array.byte_size(d_bytes)
+  <<n_len:int-size(64), n_bytes:bits, d_len:int-size(64), d_bytes:bits>>
+}
+
+fn unsafe_decode_rational(from: BitArray) -> #(rational.Rat, BitArray) {
+  case from {
+    <<n_len:int-size(64), n_bytes:size(n_len)-bytes, d_len:int-size(64), d_bytes:size(d_len)-bytes, rest:bits>> -> {
+      let assert Ok(numerator) = bigi.from_bytes(n_bytes, bigi.LittleEndian, bigi.Signed)
+      let assert Ok(denominator) = bigi.from_bytes(d_bytes, bigi.LittleEndian, bigi.Signed)
+      #(rational.Rat(numerator:, denominator:), rest)
+    }
+    _ -> panic as "expected big integer"
   }
 }
 
@@ -207,6 +238,12 @@ pub fn decode_op(from chunk: BitArray) -> #(Operation, BitArray) {
           #(DefineVariable(lexeme:, points_to:), rest)
         }
 
+        _ if op_code == op_sets_usd -> {
+          let #(cell, rest) = unsafe_decode_cell(rest)
+          let #(value, rest) = unsafe_decode_rational(rest)
+          #(SetsUsd(cell:, value:), rest)
+        }
+
         // BitArray starts with a u8 but we don't recognize it as an opcode
         _ -> panic as { "unrecognized op code: " <> int.to_string(op_code) }
       }
@@ -259,11 +296,15 @@ fn chunkify_expression_statement(
   cell: #(Int, Int),
 ) -> Operation {
   case te {
+
+    // Literals
     typechecker.BooleanLiteral(_, value:) -> SetsBool(cell:, value:)
     typechecker.FloatLiteral(_, value:) -> SetsFloat(cell:, value:)
     typechecker.IntegerLiteral(_, value:) -> SetsInteger(cell:, value:)
     typechecker.StringLiteral(_, txt:) -> SetsString(cell:, value: txt)
+
     typechecker.Variable(_, lexeme:) -> SetsVariable(cell:, lexeme:)
+    typechecker.UsdLiteral(_, dollars:) -> SetsUsd(cell:, value: dollars)
 
     _ -> todo
   }

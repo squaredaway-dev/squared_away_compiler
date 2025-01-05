@@ -45,3 +45,12 @@ pub fn integer_variables_test() {
   assert_successful_csv(",,,Foo,123,,,=Foo,,,", ",,,Foo,123,,,123\n")
   assert_successful_csv(",,,=Foo,,,Foo,123,,,", ",,,123,,,Foo,123\n")
 }
+
+pub fn float_variables_test() {
+  assert_successful_csv(",,,Foo,1.23,,,=Foo,,,", ",,,Foo,1.23,,,1.23\n")
+  assert_successful_csv(",,,=Foo,,,Foo,1.23,,,", ",,,1.23,,,Foo,1.23\n")
+}
+
+pub fn usd_literals_test() {
+  assert_successful_csv(",,,$50,,,$100.23,,,", ",,,$50,,,$100.23\n")
+}

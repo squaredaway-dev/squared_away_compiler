@@ -1,5 +1,6 @@
 //// The "VM", which evaluates the bytecode
 
+import squared_away_compiler/rational
 import gleam/bit_array
 import gleam/bytes_tree
 import gleam/dict
@@ -17,6 +18,7 @@ pub type Value {
   FloatValue(f: Float)
   IdentValue(var: String)
   StringValue(txt: String)
+  UsdValue(r: rational.Rat)
 }
 
 pub fn value_to_string(v: Value) -> String {
@@ -30,6 +32,7 @@ pub fn value_to_string(v: Value) -> String {
     IntegerValue(i) -> int.to_string(i)
     StringValue(s) -> "\"" <> s <> "\""
     IdentValue(s) -> s
+    UsdValue(r) -> "$" <> rational.to_string(r, 2, True)
   }
 }
 
@@ -146,9 +149,15 @@ fn do_eval(
 
         // Sets a cell to the value of a variable
         chunkify.SetsVariable(cell:, lexeme:) -> {
+
+          // The typechecker should sort statements so that an expression which depends on a variable 
+          // will be evaluated after that variable has been set.
           let assert Ok(value) = dict.get(vm_state.variable_vals, lexeme)
           vm_state |> set_cell(cell, value)
         }
+        chunkify.SetsUsd(cell:, value:) -> vm_state |> set_cell(cell, UsdValue(value))
+
+        
       }
 
       do_eval(rest, new_vm_state)
