@@ -43,11 +43,12 @@ pub type VmState {
   VmState(
     cell_vals: dict.Dict(#(Int, Int), Value),
     variable_vals: dict.Dict(String, Value),
+    stack: List(Value),
   )
 }
 
 fn init_vm_state() -> VmState {
-  VmState(cell_vals: dict.new(), variable_vals: dict.new())
+  VmState(cell_vals: dict.new(), variable_vals: dict.new(), stack: [])
 }
 
 fn define_var(vm_state: VmState, lexeme: String, value: Value) -> VmState {
@@ -59,6 +60,10 @@ fn define_var(vm_state: VmState, lexeme: String, value: Value) -> VmState {
 
 fn set_cell(vm_state: VmState, cell: #(Int, Int), value: Value) -> VmState {
   VmState(..vm_state, cell_vals: dict.insert(vm_state.cell_vals, cell, value))
+}
+
+fn push_stack(vm_state: VmState, val: Value) -> VmState {
+  VmState(..vm_state, stack: [val, ..vm_state.stack])
 }
 
 pub fn vm_state_to_csv(state: VmState) -> BitArray {
@@ -114,7 +119,6 @@ pub fn vm_state_to_json(state: VmState) -> String {
 }
 
 pub fn eval(bytecode: BitArray) -> Result(VmState, RuntimeError) {
-  io.debug(bit_array.inspect(bytecode))
   do_eval(bytecode, init_vm_state())
 }
 
@@ -122,6 +126,10 @@ fn do_eval(
   bytecode: BitArray,
   vm_state: VmState,
 ) -> Result(VmState, RuntimeError) {
+  io.debug(vm_state)
+  io.debug(bit_array.inspect(bytecode))
+
+
   case bytecode {
     // Base Case: Nothing more to evaluate
     <<>> -> Ok(vm_state)
@@ -180,7 +188,7 @@ fn do_eval(
         _ if op_code == chunkify.op_sets_bool_variable ->
           case rest {
             <<
-              len_lexeme:int,
+              len_lexeme:int-size(32),
               lexeme:size(len_lexeme)-bytes,
               row:int,
               col:int,
@@ -201,6 +209,18 @@ fn do_eval(
                   |> set_cell(#(row, col - 1), IdentValue(variable_name)),
               )
             }
+              _ -> panic as "Unexpected opcode arguments"
+            }
+
+            // Push a variable value on the stack
+            _ if op_code == chunkify.op_sets_variable -> case rest {
+              <<row:int, col:int, len_lexeme:int-size(32), lexeme:size(len_lexeme)-bytes, rest:bytes>> -> {
+                let assert Ok(varname) = bit_array.to_string(lexeme)
+                let assert Ok(val) = dict.get(vm_state.variable_vals, varname)
+                let new_state = set_cell(vm_state, #(row, col), val)
+                do_eval(rest, new_state)
+              }
+
             _ -> Error(InvalidOpCodeArguments(op_code, rest))
           }
 

@@ -16,11 +16,16 @@ pub const op_sets_ident = 4
 
 pub const op_sets_string = 5
 
+pub const op_sets_variable = 6
+
 // The op codes for setting variables are the same as for setting cells only,
 // just shifted by twenty.
 pub const op_sets_bool_variable = 21
 
+
+
 pub fn chunkify(stmts: List(typechecker.TypedStatement)) -> BitArray {
+  io.debug(stmts)
   do_chunkify(stmts, bytes_tree.new())
 }
 
@@ -49,7 +54,7 @@ fn do_chunkify(
       do_chunkify(
         rest,
         acc
-          |> bytes_tree.append(<<new_sets_op:int, len_lexeme:int, lexeme:utf8>>)
+          |> bytes_tree.append(<<new_sets_op:int, len_lexeme:int-size(32), lexeme:utf8>>)
           |> bytes_tree.append(expr_bytes),
       )
     }
@@ -57,7 +62,7 @@ fn do_chunkify(
     // Expression Statements
     [typechecker.ExpressionStatement(inner:, sets:), ..rest] -> {
       let expr_bytes = chunkify_expression_statement(inner, sets)
-      do_chunkify(rest, acc |> bytes_tree.prepend(expr_bytes))
+      do_chunkify(rest, acc |> bytes_tree.append(expr_bytes))
     }
 
     _ as rest ->
@@ -98,6 +103,11 @@ fn chunkify_expression_statement(
     }
     typechecker.PercentLiteral(_, _) -> todo
     typechecker.UsdLiteral(_, _) -> todo
+    typechecker.Variable(_, lexeme:) -> {
+      // Gets encoded as the lexeme and length
+      let len = string.byte_size(lexeme)
+      <<op_sets_variable:int, row:int, col:int, len:int-size(32), lexeme:utf8>>
+    }
 
     _ -> todo
   }

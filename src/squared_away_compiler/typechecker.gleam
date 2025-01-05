@@ -127,7 +127,7 @@ fn do_typecheck(
 
   case statements {
     // Base Case: No more statements to typecheck.
-    [] -> #(acc, state.collected_errors)
+    [] -> #(acc |> list.reverse, state.collected_errors)
 
     [parser.TableDefinition(_), ..rest] -> todo
 
@@ -143,8 +143,8 @@ fn do_typecheck(
         Done(Error(e)) -> error(rest, e)
         Done(Ok(te)) -> {
           let acc = [
-            ExpressionStatement(inner: te, sets:),
             VariableDefinition(lexeme:, points_to:),
+            ExpressionStatement(inner: te, sets:),
             ..acc
           ]
           let state =

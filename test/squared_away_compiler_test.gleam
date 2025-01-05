@@ -23,3 +23,7 @@ pub fn boolean_literals_test() {
 pub fn string_literals_test() {
   assert_successful_csv(",,,\"Hello\",,,", ",,,\"Hello\"\n")
 }
+
+pub fn boolean_variables_test() {
+  assert_successful_csv(",,,Hello,true,,,=Hello,,,", ",,,Hello,true,,,true\n")
+}
