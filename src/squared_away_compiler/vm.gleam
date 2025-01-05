@@ -33,21 +33,17 @@ pub fn value_to_string(v: Value) -> String {
   }
 }
 
-pub type RuntimeError {
-  UnrecognizedOpCode(code: Int)
-  InvalidOpCodeArguments(code: Int, args: BitArray)
-}
+pub type RuntimeError
 
 pub type VmState {
   VmState(
     cell_vals: dict.Dict(#(Int, Int), Value),
     variable_vals: dict.Dict(String, Value),
-    stack: List(Value),
   )
 }
 
 fn init_vm_state() -> VmState {
-  VmState(cell_vals: dict.new(), variable_vals: dict.new(), stack: [])
+  VmState(cell_vals: dict.new(), variable_vals: dict.new())
 }
 
 fn define_var(vm_state: VmState, lexeme: String, value: Value) -> VmState {
@@ -59,10 +55,6 @@ fn define_var(vm_state: VmState, lexeme: String, value: Value) -> VmState {
 
 fn set_cell(vm_state: VmState, cell: #(Int, Int), value: Value) -> VmState {
   VmState(..vm_state, cell_vals: dict.insert(vm_state.cell_vals, cell, value))
-}
-
-fn push_stack(vm_state: VmState, val: Value) -> VmState {
-  VmState(..vm_state, stack: [val, ..vm_state.stack])
 }
 
 pub fn vm_state_to_csv(state: VmState) -> BitArray {
@@ -142,9 +134,9 @@ fn do_eval(
           |> define_var(lexeme, value)
           |> set_cell(#(points_to.0, points_to.1 - 1), IdentValue(lexeme))
         }
-        chunkify.SetsBool(cell:, value:) -> {
+        chunkify.SetsBool(cell:, value:) ->
           vm_state |> set_cell(cell, BooleanValue(value))
-        }
+
         chunkify.SetsFloat(cell:, value:) ->
           vm_state |> set_cell(cell, FloatValue(value))
         chunkify.SetsInteger(cell:, value:) ->
