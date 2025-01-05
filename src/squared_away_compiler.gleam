@@ -1,3 +1,4 @@
+import gleam/result
 import gleam/list
 import gleam/string
 import gleam/int
@@ -53,6 +54,14 @@ fn displayable_from_type_error(e: typechecker.TypeError) -> DisplayableError {
   DisplayableError(title:, location: #(#(0, 0), #(0, 0))) 
 }
 
+fn displayable_from_runtime_error(e: vm.RuntimeError) -> DisplayableError {
+  // So far, these are just internal errors
+  DisplayableError(
+    title: string.inspect(e),
+    location: #(#(0, 0), #(0, 0))
+  )
+}
+
 pub fn compile(src: String) -> CompilerOutput {
   case scanner.scan(src) {
     Error(e) -> CompilerOutput(bytecode: <<>>, errors_to_display: [displayable_from_scan_error(e)])
@@ -65,12 +74,6 @@ pub fn compile(src: String) -> CompilerOutput {
   }
 }
 
-pub fn run(bytecode: BitArray) -> BitArray {
-  case vm.eval(bytecode) {
-    Error(re) -> { 
-      io.debug(re)
-      <<>>
-    }
-    Ok(bits) -> bits
-  }
+pub fn run(bytecode: BitArray) -> Result(vm.VmState, DisplayableError) {
+  vm.eval(bytecode) |> result.map_error(displayable_from_runtime_error)
 }

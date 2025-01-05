@@ -1,17 +1,13 @@
 //// This module will contain the code to pack a list of typechecked statements into it's instruction set
 
 import gleam/bytes_tree
-import gleam/io
 import gleam/string
 import squared_away_compiler/typechecker
 
 // OP Codes are starting off as u8's
 pub const op_sets_bool = 1
-
 pub const op_sets_integer = 2
-
 pub const op_sets_float = 3
-
 pub const op_sets_ident = 4
 
 // The op codes for setting variables are the same as for setting cells only,
@@ -40,7 +36,7 @@ fn do_chunkify(
       typechecker.VariableDefinition(lexeme:, points_to: _),
       ..rest
     ] -> {
-      let assert <<sets_op:int, expr_bytes:bits>> =
+      let assert <<sets_op:int, expr_bytes:bytes>> =
         chunkify_expression_statement(inner, sets)
       let new_sets_op = sets_op + 20
       let len_lexeme = string.byte_size(lexeme)
@@ -98,16 +94,4 @@ fn chunkify_expression_statement(
 
     _ -> todo
   }
-}
-
-fn encode_boolean(x: Bool) -> BitArray {
-  case x {
-    True -> <<1:int>>
-    False -> <<0:int>>
-  }
-}
-
-fn encode_sets(op_code: BitArray, cell_number: #(Int, Int)) -> BitArray {
-  let #(row, col) = cell_number
-  <<op_code:bits, row:int, col:int>>
 }
