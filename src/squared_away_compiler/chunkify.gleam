@@ -3,6 +3,7 @@
 import gleam/bit_array
 import gleam/bytes_tree
 import gleam/int
+import gleam/list
 import gleam/string
 import squared_away_compiler/typechecker
 
@@ -21,11 +22,7 @@ pub const op_sets_string = 5
 
 pub const op_sets_variable = 6
 
-// The op codes for setting variables are the same as for setting cells only,
-// just shifted by twenty.
-pub const op_def_bool_variable = 21
-
-pub const op_def_integer_variable = 22
+pub const op_def_variable = 7
 
 type Cell =
   #(Int, Int)
@@ -48,8 +45,8 @@ pub type Operation {
   // Sets a cell to the value of a variable
   SetsVariable(cell: Cell, lexeme: String)
 
-  // Defines a variable as having a boolean value
-  DefineBooleanVariable(lexeme: String, value: Bool)
+  // Defines a variable as pointing to a particular cell
+  DefineVariable(lexeme: String, points_to: Cell)
 }
 
 /// Encodes an operation into bytecode.
@@ -80,12 +77,11 @@ pub fn encode(op: Operation) -> BitArray {
       encode_cell(cell):bits,
       encode_string(lexeme):bits,
     >>
-    DefineBooleanVariable(lexeme:, value:) -> <<
-      op_def_bool_variable:int,
+    DefineVariable(lexeme:, points_to:) -> <<
+      op_def_variable:int,
       encode_string(lexeme):bits,
-      encode_boolean(value):bits,
+      encode_cell(points_to):bits,
     >>
-    
   }
 }
 
@@ -205,10 +201,10 @@ pub fn decode_op(from chunk: BitArray) -> #(Operation, BitArray) {
           #(SetsVariable(cell:, lexeme:), rest)
         }
 
-        _ if op_code == op_def_bool_variable -> {
+        _ if op_code == op_def_variable -> {
           let #(lexeme, rest) = unsafe_decode_string(rest)
-          let #(value, rest) = unsafe_decode_boolean(rest)
-          #(DefineBooleanVariable(lexeme:, value:), rest)
+          let #(points_to, rest) = unsafe_decode_cell(rest)
+          #(DefineVariable(lexeme:, points_to:), rest)
         }
 
         // BitArray starts with a u8 but we don't recognize it as an opcode
@@ -222,11 +218,11 @@ pub fn decode_op(from chunk: BitArray) -> #(Operation, BitArray) {
 }
 
 pub fn chunkify(stmts: List(typechecker.TypedStatement)) -> BitArray {
-  do_chunkify(stmts, bytes_tree.new())
-}
+  // Create the list of operations
+  let ops = do_chunkify(stmts, [])
 
-type ChunkifyState {
-  ChunkifyState
+  // Encode all the operations into bytecode
+  list.fold(ops, <<>>, fn(acc, op) { <<encode(op):bits, acc:bits>> })
 }
 
 fn do_chunkify(
@@ -238,24 +234,9 @@ fn do_chunkify(
     [] -> acc
 
     // Variable Statement (always preceded by the expression stmt for the cell it points to)
-    [
-      typechecker.ExpressionStatement(inner:, sets:),
-      typechecker.VariableDefinition(lexeme:, points_to: _),
-      ..rest
-    ] -> {
-      let set_cell_op = chunkify_expression_statement(inner, sets)
-      
-      case inner.type_ {
-        typechecker.BooleanType -> {
-          do_chunkify(rest, [DefineBooleanVariable(lexeme:, )])
-        }
-        typechecker.FloatType -> todo
-        typechecker.IntegerType -> todo
-        typechecker.PercentType -> todo
-        typechecker.StringType -> todo
-        typechecker.TestResultType -> todo
-        typechecker.UsdType -> todo
-      }
+    [typechecker.VariableDefinition(lexeme:, points_to:), ..rest] -> {
+      let variable_def = DefineVariable(lexeme:, points_to:)
+      do_chunkify(rest, [variable_def, ..acc])
     }
 
     // Expression Statements

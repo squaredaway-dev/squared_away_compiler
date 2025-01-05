@@ -126,140 +126,40 @@ fn do_eval(
   vm_state: VmState,
 ) -> Result(VmState, RuntimeError) {
   case bytecode {
-    // Base Case: Nothing more to evaluate
+    // Base case: no more bytecode to evaluate
     <<>> -> Ok(vm_state)
 
-    <<op_code:int, rest:bytes>> -> {
-      case op_code {
-        // Setting a boolean cell
-        _ if op_code == chunkify.op_sets_bool ->
-          case rest {
-            // Setting the boolean to False
-            <<row:int, col:int, 0:int, rest:bytes>> ->
-              do_eval(
-                rest,
-                vm_state |> set_cell(#(row, col), BooleanValue(False)),
-              )
+    _ -> {
+      // Pull an operation off the bytecode
+      let #(op, rest) = chunkify.decode_op(bytecode)
 
-            // Setting the boolean to True
-            <<row:int, col:int, 1:int, rest:bytes>> ->
-              do_eval(
-                rest,
-                vm_state |> set_cell(#(row, col), BooleanValue(True)),
-              )
+      let new_vm_state = case op {
+        chunkify.DefineVariable(lexeme:, points_to:) -> {
+          // The typechecker should sort operations so the cell a variable points
+          // to is set before the variable definition statement occurs
+          let assert Ok(value) = dict.get(vm_state.cell_vals, points_to)
+          vm_state
+          |> define_var(lexeme, value)
+          |> set_cell(#(points_to.0, points_to.1 - 1), IdentValue(lexeme))
+        }
+        chunkify.SetsBool(cell:, value:) -> {
+          vm_state |> set_cell(cell, BooleanValue(value))
+        }
+        chunkify.SetsFloat(cell:, value:) ->
+          vm_state |> set_cell(cell, FloatValue(value))
+        chunkify.SetsInteger(cell:, value:) ->
+          vm_state |> set_cell(cell, IntegerValue(value))
+        chunkify.SetsString(cell:, value:) ->
+          vm_state |> set_cell(cell, StringValue(value))
 
-            _ -> Error(InvalidOpCodeArguments(op_code, rest))
-          }
-
-        // Setting an integer cell
-        _ if op_code == chunkify.op_sets_integer ->
-          case rest {
-            <<row:int, col:int, n:int-size(64), rest:bytes>> -> {
-              do_eval(rest, vm_state |> set_cell(#(row, col), IntegerValue(n)))
-            }
-
-            _ -> Error(InvalidOpCodeArguments(op_code, rest))
-          }
-
-        // Setting a float cell
-        _ if op_code == chunkify.op_sets_float ->
-          case rest {
-            <<row:int, col:int, f:float, rest:bytes>> ->
-              do_eval(rest, vm_state |> set_cell(#(row, col), FloatValue(f)))
-            _ -> Error(InvalidOpCodeArguments(op_code, rest))
-          }
-
-        _ if op_code == chunkify.op_sets_string ->
-          case rest {
-            <<
-              row:int,
-              col:int,
-              len:int-size(32),
-              txt:size(len)-bytes,
-              rest:bytes,
-            >> -> {
-              let assert Ok(t) = bit_array.to_string(txt)
-              do_eval(rest, vm_state |> set_cell(#(row, col), StringValue(t)))
-            }
-            _ -> Error(InvalidOpCodeArguments(op_code, rest))
-          }
-
-        // Setting a boolean variable
-        _ if op_code == chunkify.op_sets_bool_variable ->
-          case rest {
-            <<
-              len_lexeme:int-size(32),
-              lexeme:size(len_lexeme)-bytes,
-              row:int,
-              col:int,
-              bool_val:int,
-              rest:bytes,
-            >> -> {
-              let value = case bool_val {
-                0 -> False
-                1 -> True
-                _ -> panic as "Unexpected opcode arguments"
-              }
-              let assert Ok(variable_name) = bit_array.to_string(lexeme)
-              do_eval(
-                rest,
-                vm_state
-                  |> define_var(variable_name, BooleanValue(value))
-                  |> set_cell(#(row, col), BooleanValue(value))
-                  |> set_cell(#(row, col - 1), IdentValue(variable_name)),
-              )
-            }
-            _ -> panic as "Unexpected opcode arguments"
-          }
-
-        // Push a variable value on the stack
-        _ if op_code == chunkify.op_sets_variable ->
-          case rest {
-            <<
-              row:int,
-              col:int,
-              len_lexeme:int-size(32),
-              lexeme:size(len_lexeme)-bytes,
-              rest:bytes,
-            >> -> {
-              let assert Ok(varname) = bit_array.to_string(lexeme)
-              let assert Ok(val) = dict.get(vm_state.variable_vals, varname)
-              let new_state = set_cell(vm_state, #(row, col), val)
-              do_eval(rest, new_state)
-            }
-
-            _ -> Error(InvalidOpCodeArguments(op_code, rest))
-          }
-
-        _ if op_code == chunkify.op_sets_integer_variable ->
-          case rest {
-            <<
-              len_lexeme:int-size(32),
-              lexeme:size(len_lexeme)-bytes,
-              row:int,
-              col:int,
-              int_val:int-size(64),
-              rest:bytes,
-            >> -> {
-              let assert Ok(varname) = lexeme |> bit_array.to_string
-              do_eval(
-                rest,
-                vm_state
-                  |> define_var(varname, IntegerValue(int_val))
-                  |> set_cell(#(row, col - 1), IdentValue(varname))
-                  |> set_cell(#(row, col), IntegerValue(int_val)),
-              )
-            }
-            _ -> panic as "invalid opcode arguments"
-          }
-
-        _ -> Error(UnrecognizedOpCode(op_code))
+        // Sets a cell to the value of a variable
+        chunkify.SetsVariable(cell:, lexeme:) -> {
+          let assert Ok(value) = dict.get(vm_state.variable_vals, lexeme)
+          vm_state |> set_cell(cell, value)
+        }
       }
+
+      do_eval(rest, new_vm_state)
     }
-
-    _ ->
-      panic as {
-        "Unexpected bytes in bytecode: " <> bit_array.inspect(bytecode)
-      }
   }
 }
