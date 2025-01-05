@@ -14,6 +14,8 @@ pub const op_sets_float = 3
 
 pub const op_sets_ident = 4
 
+pub const op_sets_string = 5
+
 // The op codes for setting variables are the same as for setting cells only,
 // just shifted by twenty.
 pub const op_sets_bool_variable = 21
@@ -86,12 +88,15 @@ fn chunkify_expression_statement(
       col:int,
       value:float,
     >>
-    typechecker.IntegerLiteral(_, value:) -> {
-      io.debug(value)
+    typechecker.IntegerLiteral(_, value:) -> 
       <<op_sets_integer:int, row:int, col:int, value:int-size(64)>>
+    
+    typechecker.StringLiteral(_, txt:) -> {
+      // We need to set the length of the string literal as well
+      let len = string.byte_size(txt)
+      <<op_sets_string:int, row:int, col:int, len:int-size(32), txt:utf8>>
     }
     typechecker.PercentLiteral(_, _) -> todo
-    typechecker.StringLiteral(_, _) -> todo
     typechecker.UsdLiteral(_, _) -> todo
 
     _ -> todo

@@ -17,6 +17,7 @@ pub type Value {
   IntegerValue(n: Int)
   FloatValue(f: Float)
   IdentValue(var: String)
+  StringValue(txt: String)
 }
 
 pub fn value_to_string(v: Value) -> String {
@@ -28,6 +29,7 @@ pub fn value_to_string(v: Value) -> String {
       }
     FloatValue(f) -> float.to_string(f)
     IntegerValue(i) -> int.to_string(i)
+    StringValue(s) -> "\"" <> s <> "\""
     IdentValue(s) -> s
   }
 }
@@ -164,6 +166,15 @@ fn do_eval(
               do_eval(rest, vm_state |> set_cell(#(row, col), FloatValue(f)))
             _ -> Error(InvalidOpCodeArguments(op_code, rest))
           }
+
+        _ if op_code == chunkify.op_sets_string -> case rest {
+          <<row:int, col:int, len:int-size(32), txt:size(len)-bytes, rest:bytes>> ->
+            {
+              let assert Ok(t) = bit_array.to_string(txt)
+              do_eval(rest, vm_state |> set_cell(#(row, col), StringValue(t)))
+            }
+          _ -> Error(InvalidOpCodeArguments(op_code, rest))
+        }
 
         // Setting a boolean variable
         _ if op_code == chunkify.op_sets_bool_variable ->
