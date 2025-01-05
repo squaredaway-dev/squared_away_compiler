@@ -1,7 +1,6 @@
 //// This module will contain the code to pack a list of typechecked statements into it's instruction set
 
 import gleam/bytes_tree
-import gleam/io
 import gleam/string
 import squared_away_compiler/typechecker
 
@@ -22,10 +21,9 @@ pub const op_sets_variable = 6
 // just shifted by twenty.
 pub const op_sets_bool_variable = 21
 
-
+pub const op_sets_integer_variable = 22
 
 pub fn chunkify(stmts: List(typechecker.TypedStatement)) -> BitArray {
-  io.debug(stmts)
   do_chunkify(stmts, bytes_tree.new())
 }
 
@@ -54,7 +52,11 @@ fn do_chunkify(
       do_chunkify(
         rest,
         acc
-          |> bytes_tree.append(<<new_sets_op:int, len_lexeme:int-size(32), lexeme:utf8>>)
+          |> bytes_tree.append(<<
+            new_sets_op:int,
+            len_lexeme:int-size(32),
+            lexeme:utf8,
+          >>)
           |> bytes_tree.append(expr_bytes),
       )
     }
@@ -93,9 +95,13 @@ fn chunkify_expression_statement(
       col:int,
       value:float,
     >>
-    typechecker.IntegerLiteral(_, value:) -> 
-      <<op_sets_integer:int, row:int, col:int, value:int-size(64)>>
-    
+    typechecker.IntegerLiteral(_, value:) -> <<
+      op_sets_integer:int,
+      row:int,
+      col:int,
+      value:int-size(64),
+    >>
+
     typechecker.StringLiteral(_, txt:) -> {
       // We need to set the length of the string literal as well
       let len = string.byte_size(txt)

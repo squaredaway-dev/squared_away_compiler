@@ -5,7 +5,6 @@ import gleam/bytes_tree
 import gleam/dict
 import gleam/float
 import gleam/int
-import gleam/io
 import gleam/json
 import gleam/list
 import gleam/pair
@@ -126,10 +125,6 @@ fn do_eval(
   bytecode: BitArray,
   vm_state: VmState,
 ) -> Result(VmState, RuntimeError) {
-  io.debug(vm_state)
-  io.debug(bit_array.inspect(bytecode))
-
-
   case bytecode {
     // Base Case: Nothing more to evaluate
     <<>> -> Ok(vm_state)
@@ -160,7 +155,6 @@ fn do_eval(
         _ if op_code == chunkify.op_sets_integer ->
           case rest {
             <<row:int, col:int, n:int-size(64), rest:bytes>> -> {
-              io.debug(n)
               do_eval(rest, vm_state |> set_cell(#(row, col), IntegerValue(n)))
             }
 
@@ -175,14 +169,20 @@ fn do_eval(
             _ -> Error(InvalidOpCodeArguments(op_code, rest))
           }
 
-        _ if op_code == chunkify.op_sets_string -> case rest {
-          <<row:int, col:int, len:int-size(32), txt:size(len)-bytes, rest:bytes>> ->
-            {
+        _ if op_code == chunkify.op_sets_string ->
+          case rest {
+            <<
+              row:int,
+              col:int,
+              len:int-size(32),
+              txt:size(len)-bytes,
+              rest:bytes,
+            >> -> {
               let assert Ok(t) = bit_array.to_string(txt)
               do_eval(rest, vm_state |> set_cell(#(row, col), StringValue(t)))
             }
-          _ -> Error(InvalidOpCodeArguments(op_code, rest))
-        }
+            _ -> Error(InvalidOpCodeArguments(op_code, rest))
+          }
 
         // Setting a boolean variable
         _ if op_code == chunkify.op_sets_bool_variable ->
@@ -209,19 +209,48 @@ fn do_eval(
                   |> set_cell(#(row, col - 1), IdentValue(variable_name)),
               )
             }
-              _ -> panic as "Unexpected opcode arguments"
+            _ -> panic as "Unexpected opcode arguments"
+          }
+
+        // Push a variable value on the stack
+        _ if op_code == chunkify.op_sets_variable ->
+          case rest {
+            <<
+              row:int,
+              col:int,
+              len_lexeme:int-size(32),
+              lexeme:size(len_lexeme)-bytes,
+              rest:bytes,
+            >> -> {
+              let assert Ok(varname) = bit_array.to_string(lexeme)
+              let assert Ok(val) = dict.get(vm_state.variable_vals, varname)
+              let new_state = set_cell(vm_state, #(row, col), val)
+              do_eval(rest, new_state)
             }
 
-            // Push a variable value on the stack
-            _ if op_code == chunkify.op_sets_variable -> case rest {
-              <<row:int, col:int, len_lexeme:int-size(32), lexeme:size(len_lexeme)-bytes, rest:bytes>> -> {
-                let assert Ok(varname) = bit_array.to_string(lexeme)
-                let assert Ok(val) = dict.get(vm_state.variable_vals, varname)
-                let new_state = set_cell(vm_state, #(row, col), val)
-                do_eval(rest, new_state)
-              }
-
             _ -> Error(InvalidOpCodeArguments(op_code, rest))
+          }
+
+        _ if op_code == chunkify.op_sets_integer_variable ->
+          case rest {
+            <<
+              len_lexeme:int-size(32),
+              lexeme:size(len_lexeme)-bytes,
+              row:int,
+              col:int,
+              int_val:int-size(64),
+              rest:bytes,
+            >> -> {
+              let assert Ok(varname) = lexeme |> bit_array.to_string
+              do_eval(
+                rest,
+                vm_state
+                  |> define_var(varname, IntegerValue(int_val))
+                  |> set_cell(#(row, col - 1), IdentValue(varname))
+                  |> set_cell(#(row, col), IntegerValue(int_val)),
+              )
+            }
+            _ -> panic as "invalid opcode arguments"
           }
 
         _ -> Error(UnrecognizedOpCode(op_code))

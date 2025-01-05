@@ -24,6 +24,24 @@ pub fn string_literals_test() {
   assert_successful_csv(",,,\"Hello\",,,", ",,,\"Hello\"\n")
 }
 
+pub fn float_literals_test() {
+  assert_successful_csv(",,,1.234,,,", ",,,1.234\n")
+}
+
+pub fn integer_literals_test() {
+  assert_successful_csv(",,,456,,,", ",,,456\n")
+}
+
 pub fn boolean_variables_test() {
+  // Variable declaration is hoisted by the typechecker.
   assert_successful_csv(",,,Hello,true,,,=Hello,,,", ",,,Hello,true,,,true\n")
+  assert_successful_csv(
+    ",,,=Hello,,,Hello,false,,,",
+    ",,,false,,,Hello,false\n",
+  )
+}
+
+pub fn integer_variables_test() {
+  assert_successful_csv(",,,Foo,123,,,=Foo,,,", ",,,Foo,123,,,123\n")
+  assert_successful_csv(",,,=Foo,,,Foo,123,,,", ",,,123,,,Foo,123\n")
 }

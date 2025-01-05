@@ -1,7 +1,6 @@
 //// This module will have a function for turning the untyped AST into a typed AST
 
 import gleam/dict
-import gleam/io
 import gleam/list
 import gleam/string
 import squared_away_compiler/parser
@@ -215,7 +214,6 @@ fn do_typecheck(
     }
 
     [_, ..] -> {
-      io.debug(statements)
       panic as "Idk what to do here, I wasn't expecting this comination of statements."
     }
     // "Statements" themselves don't have types. We simply need to typecheck the expressions held within any statements
