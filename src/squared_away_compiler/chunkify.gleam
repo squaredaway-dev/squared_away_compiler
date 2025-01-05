@@ -1,5 +1,6 @@
 //// This module will contain the code to pack a list of typechecked statements into it's instruction set
 
+import gleam/io
 import gleam/bytes_tree
 import gleam/string
 import squared_away_compiler/typechecker
@@ -82,12 +83,15 @@ fn chunkify_expression_statement(
       col:int,
       value:float,
     >>
-    typechecker.IntegerLiteral(_, value:) -> <<
+    typechecker.IntegerLiteral(_, value:) -> {
+      io.debug(value)
+      <<
       op_sets_integer:int,
       row:int,
       col:int,
-      value:int,
+      value:int-size(64),
     >>
+    }
     typechecker.PercentLiteral(_, _) -> todo
     typechecker.StringLiteral(_, _) -> todo
     typechecker.UsdLiteral(_, _) -> todo

@@ -152,11 +152,14 @@ fn do_eval(
         // Setting an integer cell
         _ if op_code == chunkify.op_sets_integer ->
           case rest {
-            <<row:int, col:int, n:int, rest:bytes>> ->
+            <<row:int, col:int, n:int-size(64), rest:bytes>> -> {
+              io.debug(n)
               do_eval(
                 rest,
                 vm_state |> set_cell(#(row, col), IntegerValue(n)),
               )
+            }
+              
             _ -> Error(InvalidOpCodeArguments(op_code, rest))
           }
 
