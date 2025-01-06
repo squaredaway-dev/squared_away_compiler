@@ -28,6 +28,8 @@ pub const op_def_variable = 7
 
 pub const op_sets_usd = 8
 
+pub const op_sets_percent = 9
+
 type Cell =
   #(Int, Int)
 
@@ -49,7 +51,11 @@ pub type Operation {
   // Sets a cell to the value of a variable
   SetsVariable(cell: Cell, lexeme: String)
 
+  // Sets a cell to a Usd value
   SetsUsd(cell: Cell, value: rational.Rat)
+
+  // Sets a cell to a Percent value
+  SetsPercent(cell: Cell, value: rational.Rat)
 
   // Defines a variable as pointing to a particular cell
   DefineVariable(lexeme: String, points_to: Cell)
@@ -90,6 +96,11 @@ pub fn encode(op: Operation) -> BitArray {
     >>
     SetsUsd(cell:, value:) -> <<
       op_sets_usd:int,
+      encode_cell(cell):bits,
+      encode_rational(value):bits
+    >>
+    SetsPercent(cell:, value:) -> <<
+      op_sets_percent:int,
       encode_cell(cell):bits,
       encode_rational(value):bits
     >>
@@ -244,6 +255,12 @@ pub fn decode_op(from chunk: BitArray) -> #(Operation, BitArray) {
           #(SetsUsd(cell:, value:), rest)
         }
 
+        _ if op_code == op_sets_percent -> {
+          let #(cell, rest) = unsafe_decode_cell(rest)
+          let #(value, rest) = unsafe_decode_rational(rest)
+          #(SetsPercent(cell:, value:), rest)
+        }
+
         // BitArray starts with a u8 but we don't recognize it as an opcode
         _ -> panic as { "unrecognized op code: " <> int.to_string(op_code) }
       }
@@ -302,9 +319,11 @@ fn chunkify_expression_statement(
     typechecker.FloatLiteral(_, value:) -> SetsFloat(cell:, value:)
     typechecker.IntegerLiteral(_, value:) -> SetsInteger(cell:, value:)
     typechecker.StringLiteral(_, txt:) -> SetsString(cell:, value: txt)
-
-    typechecker.Variable(_, lexeme:) -> SetsVariable(cell:, lexeme:)
     typechecker.UsdLiteral(_, dollars:) -> SetsUsd(cell:, value: dollars)
+    typechecker.PercentLiteral(_, value:) -> SetsPercent(cell:, value:)
+
+    // Variables
+    typechecker.Variable(_, lexeme:) -> SetsVariable(cell:, lexeme:)
 
     _ -> todo
   }

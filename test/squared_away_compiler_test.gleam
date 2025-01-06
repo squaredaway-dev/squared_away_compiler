@@ -54,3 +54,8 @@ pub fn float_variables_test() {
 pub fn usd_literals_test() {
   assert_successful_csv(",,,$50,,,$100.23,,,", ",,,$50,,,$100.23\n")
 }
+
+pub fn percent_literals_test() {
+  assert_successful_csv(",,,23.567%,,,", ",,,23.567%\n")
+  assert_successful_csv(",,,23567%,,,", ",,,23567%\n")
+}

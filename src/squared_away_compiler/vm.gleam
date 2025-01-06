@@ -19,6 +19,7 @@ pub type Value {
   IdentValue(var: String)
   StringValue(txt: String)
   UsdValue(r: rational.Rat)
+  PercentValue(r: rational.Rat)
 }
 
 pub fn value_to_string(v: Value) -> String {
@@ -33,6 +34,7 @@ pub fn value_to_string(v: Value) -> String {
     StringValue(s) -> "\"" <> s <> "\""
     IdentValue(s) -> s
     UsdValue(r) -> "$" <> rational.to_string(r, 2, True)
+    PercentValue(p) -> rational.to_string(p, 100, False) <> "%"
   }
 }
 
@@ -156,6 +158,7 @@ fn do_eval(
           vm_state |> set_cell(cell, value)
         }
         chunkify.SetsUsd(cell:, value:) -> vm_state |> set_cell(cell, UsdValue(value))
+        chunkify.SetsPercent(cell:, value:) -> vm_state |> set_cell(cell, PercentValue(value))
 
         
       }
