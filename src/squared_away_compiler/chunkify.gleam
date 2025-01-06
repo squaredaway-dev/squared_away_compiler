@@ -35,6 +35,8 @@ pub const op_multiply_ints = 10
 
 pub const op_set_cell = 11
 
+pub const op_multiply_floats = 12
+
 type Cell =
   #(Int, Int)
 
@@ -47,22 +49,22 @@ pub type Operation {
   // Sets a cell to a boolean
   PushBool(value: Bool)
 
-  // Push a cell to an integer value
+  // Push an integer value
   PushInteger(value: Int)
 
-  // Push a cell to a float value
+  // Push a float value
   PushFloat(value: Float)
 
-  // Push a cell to a string value
+  // Push a string value
   PushString(value: String)
 
-  // Push a cell to the value of a variable
+  // Push the value of a variable
   PushVariable(lexeme: String)
 
-  // Push a cell to a Usd value
+  // Push a Usd value
   PushUsd(value: rational.Rat)
 
-  // Push a cell to a Percent value
+  // Push a Percent value
   PushPercent(value: rational.Rat)
 
   // Defines a variable as pointing to a particular cell
@@ -70,6 +72,9 @@ pub type Operation {
 
   // Multiplies the two integer values on the stack
   MultiplyInts
+
+  // Multiply the two floating point values on the stack
+  MultiplyFloats
 }
 
 /// Encodes an operation into bytecode.
@@ -92,6 +97,7 @@ pub fn encode(op: Operation) -> BitArray {
     PushPercent(value:) -> <<op_push_percent:int, encode_rational(value):bits>>
 
     MultiplyInts -> <<op_multiply_ints:int>>
+    MultiplyFloats -> <<op_multiply_floats:int>>
 
     SetCell(cell:) -> <<op_set_cell:int, encode_cell(cell):bits>>
   }
@@ -255,6 +261,7 @@ pub fn decode_op(from chunk: BitArray) -> #(Operation, BitArray) {
         }
 
         _ if op_code == op_multiply_ints -> #(MultiplyInts, rest)
+        _ if op_code == op_multiply_floats -> #(MultiplyFloats, rest)
 
         _ if op_code == op_set_cell -> {
           let #(cell, rest) = unsafe_decode_cell(rest)
@@ -335,7 +342,12 @@ fn chunkify_expression(te: typechecker.TypedExpression) -> List(Operation) {
         scanner.Star, typechecker.IntegerType, typechecker.IntegerType -> {
           let lhs_ops = chunkify_expression(lhs)
           let rhs_ops = chunkify_expression(rhs)
-          list.append([MultiplyInts], lhs_ops) |> list.append(rhs_ops)
+          [MultiplyInts, ..lhs_ops] |> list.append(rhs_ops)
+        }
+        scanner.Star, typechecker.FloatType, typechecker.FloatType -> {
+          let lhs_ops = chunkify_expression(lhs)
+          let rhs_ops = chunkify_expression(rhs)
+          [MultiplyFloats, ..lhs_ops] |> list.append(rhs_ops)
         }
         _, _, _ -> todo
       }

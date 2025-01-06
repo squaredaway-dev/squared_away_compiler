@@ -172,6 +172,12 @@ fn do_eval(
           vm_state |> push(IntegerValue(n1 * n2))
         }
 
+        chunkify.MultiplyFloats -> {
+          let assert #(FloatValue(f1), vm_state) = unsafe_pop(vm_state)
+          let assert #(FloatValue(f2), vm_state) = unsafe_pop(vm_state)
+          vm_state |> push(FloatValue(f1 *. f2))
+        }
+
         chunkify.SetCell(cell:) -> {
           // Assert there is only one value on the stack. Then reset the stack and set the
           // cell to the value that was there.

@@ -344,6 +344,7 @@ fn typecheck_expression(
         scanner.Slash, _, _ -> error(SlashRequiresCertainTypes)
 
         scanner.Star, IntegerType, IntegerType -> resolve(IntegerType)
+        scanner.Star, FloatType, FloatType -> resolve(FloatType)
         scanner.StarStar, _, _ -> todo
 
         // Token is not a binary op. This is an internal compiler error.
