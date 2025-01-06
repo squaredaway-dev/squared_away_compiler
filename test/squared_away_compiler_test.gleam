@@ -59,3 +59,7 @@ pub fn percent_literals_test() {
   assert_successful_csv(",,,23.567%,,,", ",,,23.567%\n")
   assert_successful_csv(",,,23567%,,,", ",,,23567%\n")
 }
+
+pub fn multiplication_test() {
+  assert_successful_csv(",,,Foo,12,,,=Foo*Foo,,,", ",,,Foo,12,,,144\n")
+}

@@ -343,7 +343,7 @@ fn typecheck_expression(
         scanner.Slash, PercentType, PercentType -> resolve(PercentType)
         scanner.Slash, _, _ -> error(SlashRequiresCertainTypes)
 
-        scanner.Star, _, _ -> todo
+        scanner.Star, IntegerType, IntegerType -> resolve(IntegerType)
         scanner.StarStar, _, _ -> todo
 
         // Token is not a binary op. This is an internal compiler error.

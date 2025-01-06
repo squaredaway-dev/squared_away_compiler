@@ -1,34 +1,39 @@
 //// This module will contain the code to pack a list of typechecked statements into it's instruction set. 
 
-import squared_away_compiler/rational
+import bigi
 import gleam/bit_array
-import gleam/bytes_tree
 import gleam/int
+import gleam/io
 import gleam/list
 import gleam/string
+import squared_away_compiler/rational
+import squared_away_compiler/scanner
 import squared_away_compiler/typechecker
-import bigi
 
 // We define our opcodes as constants. To understand their purpose and arguments, see the
 // `Operation` type. For now they are encoded as u8's until we need more.
 
-pub const op_sets_bool = 1
+pub const op_push_bool = 1
 
-pub const op_sets_integer = 2
+pub const op_push_integer = 2
 
-pub const op_sets_float = 3
+pub const op_push_float = 3
 
-pub const op_sets_ident = 4
+pub const op_push_ident = 4
 
-pub const op_sets_string = 5
+pub const op_push_string = 5
 
-pub const op_sets_variable = 6
+pub const op_push_variable = 6
 
 pub const op_def_variable = 7
 
-pub const op_sets_usd = 8
+pub const op_push_usd = 8
 
-pub const op_sets_percent = 9
+pub const op_push_percent = 9
+
+pub const op_multiply_ints = 10
+
+pub const op_set_cell = 11
 
 type Cell =
   #(Int, Int)
@@ -36,57 +41,46 @@ type Cell =
 /// This type describes our opcode instruction set. 
 pub type Operation {
 
+  // Set cell to the value on the stack
+  SetCell(cell: Cell)
+
   // Sets a cell to a boolean
-  SetsBool(cell: Cell, value: Bool)
+  PushBool(value: Bool)
 
-  // Sets a cell to an integer value
-  SetsInteger(cell: Cell, value: Int)
+  // Push a cell to an integer value
+  PushInteger(value: Int)
 
-  // Sets a cell to a float value
-  SetsFloat(cell: Cell, value: Float)
+  // Push a cell to a float value
+  PushFloat(value: Float)
 
-  // Sets a cell to a string value
-  SetsString(cell: Cell, value: String)
+  // Push a cell to a string value
+  PushString(value: String)
 
-  // Sets a cell to the value of a variable
-  SetsVariable(cell: Cell, lexeme: String)
+  // Push a cell to the value of a variable
+  PushVariable(lexeme: String)
 
-  // Sets a cell to a Usd value
-  SetsUsd(cell: Cell, value: rational.Rat)
+  // Push a cell to a Usd value
+  PushUsd(value: rational.Rat)
 
-  // Sets a cell to a Percent value
-  SetsPercent(cell: Cell, value: rational.Rat)
+  // Push a cell to a Percent value
+  PushPercent(value: rational.Rat)
 
   // Defines a variable as pointing to a particular cell
   DefineVariable(lexeme: String, points_to: Cell)
+
+  // Multiplies the two integer values on the stack
+  MultiplyInts
 }
 
 /// Encodes an operation into bytecode.
 pub fn encode(op: Operation) -> BitArray {
   case op {
-    SetsBool(cell:, value:) -> <<
-      op_sets_bool:int,
-      encode_cell(cell):bits,
-      encode_boolean(value):bits,
-    >>
-    SetsInteger(cell:, value:) -> <<
-      op_sets_integer:int,
-      encode_cell(cell):bits,
-      encode_integer(value):bits,
-    >>
-    SetsFloat(cell:, value:) -> <<
-      op_sets_float:int,
-      encode_cell(cell):bits,
-      encode_float(value):bits,
-    >>
-    SetsString(cell:, value:) -> <<
-      op_sets_string:int,
-      encode_cell(cell):bits,
-      encode_string(value):bits,
-    >>
-    SetsVariable(cell:, lexeme:) -> <<
-      op_sets_variable:int,
-      encode_cell(cell):bits,
+    PushBool(value:) -> <<op_push_bool:int, encode_boolean(value):bits>>
+    PushInteger(value:) -> <<op_push_integer:int, encode_integer(value):bits>>
+    PushFloat(value:) -> <<op_push_float:int, encode_float(value):bits>>
+    PushString(value:) -> <<op_push_string:int, encode_string(value):bits>>
+    PushVariable(lexeme:) -> <<
+      op_push_variable:int,
       encode_string(lexeme):bits,
     >>
     DefineVariable(lexeme:, points_to:) -> <<
@@ -94,16 +88,12 @@ pub fn encode(op: Operation) -> BitArray {
       encode_string(lexeme):bits,
       encode_cell(points_to):bits,
     >>
-    SetsUsd(cell:, value:) -> <<
-      op_sets_usd:int,
-      encode_cell(cell):bits,
-      encode_rational(value):bits
-    >>
-    SetsPercent(cell:, value:) -> <<
-      op_sets_percent:int,
-      encode_cell(cell):bits,
-      encode_rational(value):bits
-    >>
+    PushUsd(value:) -> <<op_push_usd:int, encode_rational(value):bits>>
+    PushPercent(value:) -> <<op_push_percent:int, encode_rational(value):bits>>
+
+    MultiplyInts -> <<op_multiply_ints:int>>
+
+    SetCell(cell:) -> <<op_set_cell:int, encode_cell(cell):bits>>
   }
 }
 
@@ -122,19 +112,29 @@ fn unsafe_decode_cell(from: BitArray) -> #(Cell, BitArray) {
 }
 
 fn encode_rational(r: rational.Rat) -> BitArray {
-  let rational.Rat(n, d) = r 
-  let assert Ok(n_bytes) = bigi.to_bytes(n, bigi.LittleEndian, bigi.Signed, 10_000)
+  let rational.Rat(n, d) = r
+  let assert Ok(n_bytes) =
+    bigi.to_bytes(n, bigi.LittleEndian, bigi.Signed, 10_000)
   let n_len = bit_array.byte_size(n_bytes)
-  let assert Ok(d_bytes) = bigi.to_bytes(d, bigi.LittleEndian, bigi.Signed, 10_000)
+  let assert Ok(d_bytes) =
+    bigi.to_bytes(d, bigi.LittleEndian, bigi.Signed, 10_000)
   let d_len = bit_array.byte_size(d_bytes)
   <<n_len:int-size(64), n_bytes:bits, d_len:int-size(64), d_bytes:bits>>
 }
 
 fn unsafe_decode_rational(from: BitArray) -> #(rational.Rat, BitArray) {
   case from {
-    <<n_len:int-size(64), n_bytes:size(n_len)-bytes, d_len:int-size(64), d_bytes:size(d_len)-bytes, rest:bits>> -> {
-      let assert Ok(numerator) = bigi.from_bytes(n_bytes, bigi.LittleEndian, bigi.Signed)
-      let assert Ok(denominator) = bigi.from_bytes(d_bytes, bigi.LittleEndian, bigi.Signed)
+    <<
+      n_len:int-size(64),
+      n_bytes:size(n_len)-bytes,
+      d_len:int-size(64),
+      d_bytes:size(d_len)-bytes,
+      rest:bits,
+    >> -> {
+      let assert Ok(numerator) =
+        bigi.from_bytes(n_bytes, bigi.LittleEndian, bigi.Signed)
+      let assert Ok(denominator) =
+        bigi.from_bytes(d_bytes, bigi.LittleEndian, bigi.Signed)
       #(rational.Rat(numerator:, denominator:), rest)
     }
     _ -> panic as "expected big integer"
@@ -213,34 +213,29 @@ pub fn decode_op(from chunk: BitArray) -> #(Operation, BitArray) {
     // Check the opcode to see what to do
     <<op_code:int, rest:bits>> -> {
       case op_code {
-        _ if op_code == op_sets_bool -> {
-          let #(cell, rest) = unsafe_decode_cell(rest)
+        _ if op_code == op_push_bool -> {
           let #(value, rest) = unsafe_decode_boolean(rest)
-          #(SetsBool(cell:, value:), rest)
+          #(PushBool(value:), rest)
         }
 
-        _ if op_code == op_sets_integer -> {
-          let #(cell, rest) = unsafe_decode_cell(rest)
+        _ if op_code == op_push_integer -> {
           let #(value, rest) = unsafe_decode_integer(rest)
-          #(SetsInteger(cell:, value:), rest)
+          #(PushInteger(value:), rest)
         }
 
-        _ if op_code == op_sets_float -> {
-          let #(cell, rest) = unsafe_decode_cell(rest)
+        _ if op_code == op_push_float -> {
           let #(value, rest) = unsafe_decode_float(rest)
-          #(SetsFloat(cell:, value:), rest)
+          #(PushFloat(value:), rest)
         }
 
-        _ if op_code == op_sets_string -> {
-          let #(cell, rest) = unsafe_decode_cell(rest)
+        _ if op_code == op_push_string -> {
           let #(value, rest) = unsafe_decode_string(rest)
-          #(SetsString(cell:, value:), rest)
+          #(PushString(value:), rest)
         }
 
-        _ if op_code == op_sets_variable -> {
-          let #(cell, rest) = unsafe_decode_cell(rest)
+        _ if op_code == op_push_variable -> {
           let #(lexeme, rest) = unsafe_decode_string(rest)
-          #(SetsVariable(cell:, lexeme:), rest)
+          #(PushVariable(lexeme:), rest)
         }
 
         _ if op_code == op_def_variable -> {
@@ -249,16 +244,21 @@ pub fn decode_op(from chunk: BitArray) -> #(Operation, BitArray) {
           #(DefineVariable(lexeme:, points_to:), rest)
         }
 
-        _ if op_code == op_sets_usd -> {
-          let #(cell, rest) = unsafe_decode_cell(rest)
+        _ if op_code == op_push_usd -> {
           let #(value, rest) = unsafe_decode_rational(rest)
-          #(SetsUsd(cell:, value:), rest)
+          #(PushUsd(value:), rest)
         }
 
-        _ if op_code == op_sets_percent -> {
-          let #(cell, rest) = unsafe_decode_cell(rest)
+        _ if op_code == op_push_percent -> {
           let #(value, rest) = unsafe_decode_rational(rest)
-          #(SetsPercent(cell:, value:), rest)
+          #(PushPercent(value:), rest)
+        }
+
+        _ if op_code == op_multiply_ints -> #(MultiplyInts, rest)
+
+        _ if op_code == op_set_cell -> {
+          let #(cell, rest) = unsafe_decode_cell(rest)
+          #(SetCell(cell:), rest)
         }
 
         // BitArray starts with a u8 but we don't recognize it as an opcode
@@ -296,7 +296,7 @@ fn do_chunkify(
     // Expression Statements
     [typechecker.ExpressionStatement(inner:, sets:), ..rest] -> {
       let expr_operation = chunkify_expression_statement(inner, sets)
-      do_chunkify(rest, [expr_operation, ..acc])
+      do_chunkify(rest, list.append(expr_operation, acc))
     }
 
     _ as rest ->
@@ -311,19 +311,35 @@ fn do_chunkify(
 fn chunkify_expression_statement(
   te: typechecker.TypedExpression,
   cell: #(Int, Int),
-) -> Operation {
-  case te {
+) -> List(Operation) {
+  let expr_chunks = chunkify_expression(te)
+  [SetCell(cell:), ..expr_chunks]
+}
 
+fn chunkify_expression(te: typechecker.TypedExpression) -> List(Operation) {
+  case te {
     // Literals
-    typechecker.BooleanLiteral(_, value:) -> SetsBool(cell:, value:)
-    typechecker.FloatLiteral(_, value:) -> SetsFloat(cell:, value:)
-    typechecker.IntegerLiteral(_, value:) -> SetsInteger(cell:, value:)
-    typechecker.StringLiteral(_, txt:) -> SetsString(cell:, value: txt)
-    typechecker.UsdLiteral(_, dollars:) -> SetsUsd(cell:, value: dollars)
-    typechecker.PercentLiteral(_, value:) -> SetsPercent(cell:, value:)
+    typechecker.BooleanLiteral(_, value:) -> [PushBool(value:)]
+    typechecker.FloatLiteral(_, value:) -> [PushFloat(value:)]
+    typechecker.IntegerLiteral(_, value:) -> [PushInteger(value:)]
+    typechecker.StringLiteral(_, txt:) -> [PushString(value: txt)]
+    typechecker.UsdLiteral(_, dollars:) -> [PushUsd(value: dollars)]
+    typechecker.PercentLiteral(_, value:) -> [PushPercent(value:)]
 
     // Variables
-    typechecker.Variable(_, lexeme:) -> SetsVariable(cell:, lexeme:)
+    typechecker.Variable(_, lexeme:) -> [PushVariable(lexeme:)]
+
+    // Expressions
+    typechecker.BinaryOp(type_, op:, lhs:, rhs:) -> {
+      case op.type_, lhs.type_, rhs.type_ {
+        scanner.Star, typechecker.IntegerType, typechecker.IntegerType -> {
+          let lhs_ops = chunkify_expression(lhs)
+          let rhs_ops = chunkify_expression(rhs)
+          list.append([MultiplyInts], lhs_ops) |> list.append(rhs_ops)
+        }
+        _, _, _ -> todo
+      }
+    }
 
     _ -> todo
   }

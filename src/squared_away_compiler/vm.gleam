@@ -1,16 +1,17 @@
 //// The "VM", which evaluates the bytecode
 
-import squared_away_compiler/rational
 import gleam/bit_array
 import gleam/bytes_tree
 import gleam/dict
 import gleam/float
 import gleam/int
+import gleam/io
 import gleam/json
 import gleam/list
 import gleam/pair
 import gleam/result
 import squared_away_compiler/chunkify
+import squared_away_compiler/rational
 
 pub type Value {
   BooleanValue(b: Bool)
@@ -44,11 +45,12 @@ pub type VmState {
   VmState(
     cell_vals: dict.Dict(#(Int, Int), Value),
     variable_vals: dict.Dict(String, Value),
+    stack: List(Value),
   )
 }
 
 fn init_vm_state() -> VmState {
-  VmState(cell_vals: dict.new(), variable_vals: dict.new())
+  VmState(cell_vals: dict.new(), variable_vals: dict.new(), stack: [])
 }
 
 fn define_var(vm_state: VmState, lexeme: String, value: Value) -> VmState {
@@ -60,6 +62,15 @@ fn define_var(vm_state: VmState, lexeme: String, value: Value) -> VmState {
 
 fn set_cell(vm_state: VmState, cell: #(Int, Int), value: Value) -> VmState {
   VmState(..vm_state, cell_vals: dict.insert(vm_state.cell_vals, cell, value))
+}
+
+fn push(vm_state: VmState, value: Value) -> VmState {
+  VmState(..vm_state, stack: [value, ..vm_state.stack])
+}
+
+fn unsafe_pop(vm_state: VmState) -> #(Value, VmState) {
+  let assert [v, ..rest] = vm_state.stack
+  #(v, VmState(..vm_state, stack: rest))
 }
 
 pub fn vm_state_to_csv(state: VmState) -> BitArray {
@@ -139,28 +150,34 @@ fn do_eval(
           |> define_var(lexeme, value)
           |> set_cell(#(points_to.0, points_to.1 - 1), IdentValue(lexeme))
         }
-        chunkify.SetsBool(cell:, value:) ->
-          vm_state |> set_cell(cell, BooleanValue(value))
+        chunkify.PushBool(value:) -> vm_state |> push(BooleanValue(value))
 
-        chunkify.SetsFloat(cell:, value:) ->
-          vm_state |> set_cell(cell, FloatValue(value))
-        chunkify.SetsInteger(cell:, value:) ->
-          vm_state |> set_cell(cell, IntegerValue(value))
-        chunkify.SetsString(cell:, value:) ->
-          vm_state |> set_cell(cell, StringValue(value))
+        chunkify.PushFloat(value:) -> vm_state |> push(FloatValue(value))
+        chunkify.PushInteger(value:) -> vm_state |> push(IntegerValue(value))
+        chunkify.PushString(value:) -> vm_state |> push(StringValue(value))
 
         // Sets a cell to the value of a variable
-        chunkify.SetsVariable(cell:, lexeme:) -> {
-
+        chunkify.PushVariable(lexeme:) -> {
           // The typechecker should sort statements so that an expression which depends on a variable 
           // will be evaluated after that variable has been set.
           let assert Ok(value) = dict.get(vm_state.variable_vals, lexeme)
-          vm_state |> set_cell(cell, value)
+          vm_state |> push(value)
         }
-        chunkify.SetsUsd(cell:, value:) -> vm_state |> set_cell(cell, UsdValue(value))
-        chunkify.SetsPercent(cell:, value:) -> vm_state |> set_cell(cell, PercentValue(value))
+        chunkify.PushUsd(value:) -> vm_state |> push(UsdValue(value))
+        chunkify.PushPercent(value:) -> vm_state |> push(PercentValue(value))
 
-        
+        chunkify.MultiplyInts -> {
+          let assert #(IntegerValue(n1), vm_state) = unsafe_pop(vm_state)
+          let assert #(IntegerValue(n2), vm_state) = unsafe_pop(vm_state)
+          vm_state |> push(IntegerValue(n1 * n2))
+        }
+
+        chunkify.SetCell(cell:) -> {
+          // Assert there is only one value on the stack. Then reset the stack and set the
+          // cell to the value that was there.
+          let assert [value] = vm_state.stack
+          VmState(..vm_state, stack: []) |> set_cell(cell, value)
+        }
       }
 
       do_eval(rest, new_vm_state)
