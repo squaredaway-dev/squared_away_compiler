@@ -345,6 +345,7 @@ fn typecheck_expression(
 
         scanner.Star, IntegerType, IntegerType -> resolve(IntegerType)
         scanner.Star, FloatType, FloatType -> resolve(FloatType)
+        scanner.Star, PercentType, PercentType -> resolve(PercentType)
         scanner.StarStar, _, _ -> todo
 
         // Token is not a binary op. This is an internal compiler error.

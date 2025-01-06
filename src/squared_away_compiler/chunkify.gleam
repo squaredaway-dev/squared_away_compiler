@@ -37,6 +37,8 @@ pub const op_set_cell = 11
 
 pub const op_multiply_floats = 12
 
+pub const op_multiply_percents = 13
+
 type Cell =
   #(Int, Int)
 
@@ -75,6 +77,8 @@ pub type Operation {
 
   // Multiply the two floating point values on the stack
   MultiplyFloats
+
+  MultiplyPercents
 }
 
 /// Encodes an operation into bytecode.
@@ -98,6 +102,7 @@ pub fn encode(op: Operation) -> BitArray {
 
     MultiplyInts -> <<op_multiply_ints:int>>
     MultiplyFloats -> <<op_multiply_floats:int>>
+    MultiplyPercents -> <<op_multiply_percents:int>>
 
     SetCell(cell:) -> <<op_set_cell:int, encode_cell(cell):bits>>
   }
@@ -262,6 +267,7 @@ pub fn decode_op(from chunk: BitArray) -> #(Operation, BitArray) {
 
         _ if op_code == op_multiply_ints -> #(MultiplyInts, rest)
         _ if op_code == op_multiply_floats -> #(MultiplyFloats, rest)
+        _ if op_code == op_multiply_percents -> #(MultiplyPercents, rest)
 
         _ if op_code == op_set_cell -> {
           let #(cell, rest) = unsafe_decode_cell(rest)
@@ -348,6 +354,11 @@ fn chunkify_expression(te: typechecker.TypedExpression) -> List(Operation) {
           let lhs_ops = chunkify_expression(lhs)
           let rhs_ops = chunkify_expression(rhs)
           [MultiplyFloats, ..lhs_ops] |> list.append(rhs_ops)
+        }
+        scanner.Star, typechecker.PercentType, typechecker.PercentType -> {
+          let lhs_ops = chunkify_expression(lhs)
+          let rhs_ops = chunkify_expression(rhs)
+          [MultiplyPercents, ..lhs_ops] |> list.append(rhs_ops)
         }
         _, _, _ -> todo
       }

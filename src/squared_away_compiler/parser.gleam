@@ -185,7 +185,10 @@ fn parse_expr(
             expect_one_of(rest, [scanner.Comma, scanner.Newline]),
           )
           let assert Ok(#(rat, "")) = rational.from_string(lexeme)
-          Ok(#(PercentLiteral(rat), rest))
+          Ok(#(
+            PercentLiteral(rational.divide(rat, rational.from_int(100))),
+            rest,
+          ))
         }
         // This means it was followed by a Comma or Newline. Should be parsed as an integer
         _ -> {
@@ -207,7 +210,10 @@ fn parse_expr(
       case tok.type_ {
         scanner.Percent -> {
           let assert Ok(#(rat, "")) = rational.from_string(lexeme)
-          Ok(#(PercentLiteral(rat), rest))
+          Ok(#(
+            PercentLiteral(rational.divide(rat, rational.from_int(100))),
+            rest,
+          ))
         }
         _ -> {
           let assert Ok(f) = float.parse(lexeme)

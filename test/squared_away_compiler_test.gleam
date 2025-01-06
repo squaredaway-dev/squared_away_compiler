@@ -62,8 +62,12 @@ pub fn percent_literals_test() {
 
 pub fn multiplication_test() {
   assert_successful_csv(",,,Foo,12,,,=Foo*Foo,,,", ",,,Foo,12,,,144\n")
+
+  // TODO: significant figures.
   assert_successful_csv(
     ",,,Foo,3.1,,,=Foo*Foo,,,",
     ",,,Foo,3.1,,,9.610000000000001\n",
   )
+
+  assert_successful_csv(",,,Foo,10%,,,=Foo*Foo,,,", ",,,Foo,10%,,,1%\n")
 }

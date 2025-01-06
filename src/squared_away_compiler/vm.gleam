@@ -35,7 +35,13 @@ pub fn value_to_string(v: Value) -> String {
     StringValue(s) -> "\"" <> s <> "\""
     IdentValue(s) -> s
     UsdValue(r) -> "$" <> rational.to_string(r, 2, True)
-    PercentValue(p) -> rational.to_string(p, 100, False) <> "%"
+    PercentValue(p) ->
+      rational.to_string(
+        rational.multiply(p, rational.from_int(100)),
+        100,
+        False,
+      )
+      <> "%"
   }
 }
 
@@ -150,11 +156,13 @@ fn do_eval(
           |> define_var(lexeme, value)
           |> set_cell(#(points_to.0, points_to.1 - 1), IdentValue(lexeme))
         }
-        chunkify.PushBool(value:) -> vm_state |> push(BooleanValue(value))
 
+        chunkify.PushBool(value:) -> vm_state |> push(BooleanValue(value))
         chunkify.PushFloat(value:) -> vm_state |> push(FloatValue(value))
         chunkify.PushInteger(value:) -> vm_state |> push(IntegerValue(value))
         chunkify.PushString(value:) -> vm_state |> push(StringValue(value))
+        chunkify.PushUsd(value:) -> vm_state |> push(UsdValue(value))
+        chunkify.PushPercent(value:) -> vm_state |> push(PercentValue(value))
 
         // Sets a cell to the value of a variable
         chunkify.PushVariable(lexeme:) -> {
@@ -163,8 +171,6 @@ fn do_eval(
           let assert Ok(value) = dict.get(vm_state.variable_vals, lexeme)
           vm_state |> push(value)
         }
-        chunkify.PushUsd(value:) -> vm_state |> push(UsdValue(value))
-        chunkify.PushPercent(value:) -> vm_state |> push(PercentValue(value))
 
         chunkify.MultiplyInts -> {
           let assert #(IntegerValue(n1), vm_state) = unsafe_pop(vm_state)
@@ -176,6 +182,12 @@ fn do_eval(
           let assert #(FloatValue(f1), vm_state) = unsafe_pop(vm_state)
           let assert #(FloatValue(f2), vm_state) = unsafe_pop(vm_state)
           vm_state |> push(FloatValue(f1 *. f2))
+        }
+
+        chunkify.MultiplyPercents -> {
+          let assert #(PercentValue(p1), vm_state) = unsafe_pop(vm_state)
+          let assert #(PercentValue(p2), vm_state) = unsafe_pop(vm_state)
+          vm_state |> push(PercentValue(rational.multiply(p1, p2)))
         }
 
         chunkify.SetCell(cell:) -> {
