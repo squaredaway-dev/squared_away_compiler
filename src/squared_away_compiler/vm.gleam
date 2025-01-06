@@ -99,19 +99,20 @@ pub fn vm_state_to_csv(state: VmState) -> BitArray {
       let row =
         list.range(1, cols)
         |> list.fold(bytes_tree.new(), fn(csv_row_acc, col) {
+          let delim = case col == cols {
+            True -> "\n"
+            False -> ","
+          }
+
           case dict.get(state.cell_vals, #(row, col)) {
-            // No output for this cell, append a comma
-            Error(_) -> csv_row_acc |> bytes_tree.append(<<",">>)
+            // No output for this cell, append a comma or newline
+            Error(_) -> bytes_tree.append(csv_row_acc, <<delim:utf8>>)
 
             // There's a value for this cell, add it and then add a comma
             Ok(v) -> {
-              let v_str = case col == cols {
-                True -> value_to_string(v) <> "\n"
-                False -> value_to_string(v) <> ","
-              }
-
               csv_row_acc
-              |> bytes_tree.append(v_str |> bit_array.from_string)
+              |> bytes_tree.append(<<value_to_string(v):utf8>>)
+              |> bytes_tree.append(<<delim:utf8>>)
             }
           }
         })

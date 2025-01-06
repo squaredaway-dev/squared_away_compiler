@@ -71,3 +71,10 @@ pub fn multiplication_test() {
 
   assert_successful_csv(",,,Foo,10%,,,=Foo*Foo,,,", ",,,Foo,10%,,,1%\n")
 }
+
+pub fn multiple_rows_test() {
+  assert_successful_csv(
+    ",,,=Foo,,,,,,,,,\n,,,Foo,12,,,,,,,,",
+    ",,,12,\n,,,Foo,12\n",
+  )
+}
