@@ -39,6 +39,8 @@ pub const op_multiply_floats = 12
 
 pub const op_multiply_percents = 13
 
+pub const op_def_header = 14
+
 type Cell =
   #(Int, Int)
 
@@ -72,6 +74,8 @@ pub type Operation {
   // Defines a variable as pointing to a particular cell
   DefineVariable(lexeme: String, points_to: Cell)
 
+  DefineHeader(lexeme: String, in: Cell)
+
   // Multiplies the two integer values on the stack
   MultiplyInts
 
@@ -97,6 +101,12 @@ pub fn encode(op: Operation) -> BitArray {
       encode_string(lexeme):bits,
       encode_cell(points_to):bits,
     >>
+    DefineHeader(lexeme:, in:) -> <<
+      op_def_header:int,
+      encode_cell(in):bits,
+      encode_string(lexeme):bits,
+    >>
+
     PushUsd(value:) -> <<op_push_usd:int, encode_rational(value):bits>>
     PushPercent(value:) -> <<op_push_percent:int, encode_rational(value):bits>>
 
@@ -255,6 +265,12 @@ pub fn decode_op(from chunk: BitArray) -> #(Operation, BitArray) {
           #(DefineVariable(lexeme:, points_to:), rest)
         }
 
+        _ if op_code == op_def_header -> {
+          let #(cell, rest) = unsafe_decode_cell(rest)
+          let #(lexeme, rest) = unsafe_decode_string(rest)
+          #(DefineHeader(lexeme:, in: cell), rest)
+        }
+
         _ if op_code == op_push_usd -> {
           let #(value, rest) = unsafe_decode_rational(rest)
           #(PushUsd(value:), rest)
@@ -310,6 +326,11 @@ fn do_chunkify(
     [typechecker.ExpressionStatement(inner:, sets:), ..rest] -> {
       let expr_operation = chunkify_expression_statement(inner, sets)
       do_chunkify(rest, list.append(expr_operation, acc))
+    }
+
+    [typechecker.HeaderDefinition(lexeme:, in:), ..rest] -> {
+      let header_def = DefineHeader(lexeme:, in:)
+      do_chunkify(rest, [header_def, ..acc])
     }
 
     _ as rest ->

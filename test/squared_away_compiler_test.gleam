@@ -78,3 +78,10 @@ pub fn multiple_rows_test() {
     ",,,12,\n,,,Foo,12\n",
   )
 }
+
+pub fn table_test() {
+  assert_successful_csv(
+    ",,foo,bar,,\n,baz,7,8,,\n,=baz_foo,=baz_bar,,,,",
+    ",,foo,bar\n,baz,7,8\n,7,8,\n",
+  )
+}

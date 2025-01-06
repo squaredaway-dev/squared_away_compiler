@@ -6,6 +6,7 @@
 import gleam/dict
 import gleam/float
 import gleam/int
+import gleam/io
 import gleam/list
 import gleam/option
 import gleam/result
@@ -16,6 +17,10 @@ pub type Statement {
   // A variable definition is done by putting an identifier in one cell and 
   // then putting an expression in the cell directly to the right
   VariableDefinition(lexeme: String, points_to: #(Int, Int))
+
+  // We need to produce a statement for this so the vm knows to set the cell
+  // to the ident value without making the lexeme useable as a variable.
+  HeaderDefinition(lexeme: String, in: #(Int, Int))
 
   // When labels are placed in such a way they create a table, each cross reference
   // becomes a variable available for use.
@@ -68,18 +73,21 @@ pub type Span {
 }
 
 type ParseState {
-  ParseState(collected_errors: List(ParseError))
+  ParseState(
+    collected_errors: List(ParseError),
+    waiting_on_cells: dict.Dict(#(Int, Int), List(String)),
+  )
 }
 
 fn init_state() -> ParseState {
-  ParseState(collected_errors: [])
+  ParseState(collected_errors: [], waiting_on_cells: dict.new())
 }
 
 fn error(state: ParseState, type_: ParseErrorType, span: Span) -> ParseState {
-  ParseState(collected_errors: [
-    ParseError(span:, type_:),
-    ..state.collected_errors
-  ])
+  ParseState(
+    ..state,
+    collected_errors: [ParseError(span:, type_:), ..state.collected_errors],
+  )
 }
 
 pub fn parse(toks: List(scanner.Token)) -> #(List(Statement), List(ParseError)) {
@@ -105,6 +113,53 @@ fn do_parse(
         | scanner.Token(type_: scanner.Newline, ..), _
         -> do_parse(rest, state, acc)
 
+        // Table Definitions (one variable after the other)
+        scanner.Token(
+          type_: scanner.Identifier,
+          ..,
+        ) as h1,
+          [
+            scanner.Token(
+              type_: scanner.Comma,
+              ..,
+            ),
+            scanner.Token(
+              type_: scanner.Identifier,
+              ..,
+            ) as h2,
+            scanner.Token(
+              type_: scanner.Comma,
+              ..,
+            ),
+            ..rest
+          ]
+        -> {
+          // We first need to parse more headers while we can.
+          let #(remaining_headers, rest) = parse_headers(rest, [])
+          let headers =
+            [h1, h2, ..remaining_headers] |> list.map(fn(t) { t.lexeme })
+          let header_stmts =
+            headers
+            |> list.index_map(fn(h, i) {
+              HeaderDefinition(h, #(h1.row, h1.col + i))
+            })
+
+          // We need to register some sort of handler for when important cells come up.
+          // The cell for the first row of the table is #(row+1, col-1) from the first ident.
+          // Each time a cell appears there, we'll declare cross_reference variables for the 
+          // headers, and update the waiting on cell
+          let new_state =
+            ParseState(
+              ..state,
+              waiting_on_cells: dict.insert(
+                state.waiting_on_cells,
+                #(h1.row + 1, h1.col - 1),
+                headers,
+              ),
+            )
+          do_parse(rest, new_state, list.append(header_stmts, acc))
+        }
+
         // Variable declarations
         scanner.Token(
           type_: scanner.Identifier,
@@ -113,22 +168,54 @@ fn do_parse(
         ),
           [scanner.Token(type_: scanner.Comma, row:, col:, ..), ..rest]
         ->
-          case parse_expr(rest) {
-            // Add the error to the state and reset the parser
-            Error(e) -> {
-              let new_state = error(state, e, Span(start:, end: #(row, col)))
-              do_parse(rest, new_state, acc)
+          case dict.get(state.waiting_on_cells, #(row, col - 1)) {
+            Ok(headers) -> {
+              // We need to declare variables for every upcoming header
+              let variables =
+                list.index_map(headers, fn(h, i) {
+                  let l = lexeme <> "_" <> h
+                  let points_to = #(row, col + i)
+                  VariableDefinition(l, points_to)
+                })
+
+              // The tables needs to be waiting on the next cell down now
+              let new_waiting_on =
+                dict.delete(state.waiting_on_cells, #(row, col - 1))
+                |> dict.insert(#(row + 1, col - 1), headers)
+
+              do_parse(
+                rest,
+                ParseState(..state, waiting_on_cells: new_waiting_on),
+                list.append(variables, [
+                  HeaderDefinition(lexeme, #(row, col - 1)),
+                  ..acc
+                ]),
+              )
             }
 
-            // We need to produce two statements:
-            // 1. The expression statement to set the value for that cell.
-            // 2. The Variable statement to set the variable to be that same expression.
-            Ok(#(expr, rest)) ->
-              do_parse(rest, state, [
-                ExpressionStatement(expr, sets: #(row, col)),
-                VariableDefinition(lexeme:, points_to: #(row, col)),
-                ..acc
-              ])
+            // Not part of table definition, treat as regular variable
+            Error(Nil) ->
+              case parse_expr(rest) {
+                // Add the error to the state and reset the parser
+                Error(e) -> {
+                  let new_state =
+                    error(state, e, Span(start:, end: #(row, col)))
+                  do_parse(rest, new_state, acc)
+                }
+
+                // We need to produce three statements:
+                // 1. The expression statement to set the value for that cell.
+                // 2. The header definition statement to set the content of the cell with the ident.
+                // 2. The Variable statement to set the variable to be that same expression.
+                Ok(#(expr, rest)) -> {
+                  do_parse(rest, state, [
+                    ExpressionStatement(expr, sets: #(row, col)),
+                    VariableDefinition(lexeme:, points_to: #(row, col)),
+                    HeaderDefinition(lexeme:, in: #(row, col - 1)),
+                    ..acc
+                  ])
+                }
+              }
           }
 
         _, _ -> {
@@ -155,6 +242,26 @@ fn do_parse(
         }
       }
     }
+  }
+}
+
+fn parse_headers(
+  toks: List(scanner.Token),
+  acc: List(scanner.Token),
+) -> #(List(scanner.Token), List(scanner.Token)) {
+  case toks {
+    [
+      scanner.Token(
+        type_: scanner.Identifier,
+        ..,
+      ) as tok,
+      scanner.Token(
+        type_: scanner.Comma,
+        ..,
+      ),
+      ..rest
+    ] -> parse_headers(rest, [tok, ..acc])
+    _ -> #(acc, toks)
   }
 }
 

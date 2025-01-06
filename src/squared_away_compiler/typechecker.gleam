@@ -1,6 +1,7 @@
 //// This module will have a function for turning the untyped AST into a typed AST
 
 import gleam/dict
+import gleam/io
 import gleam/list
 import gleam/string
 import squared_away_compiler/parser
@@ -47,6 +48,8 @@ pub type TypedStatement {
   // then putting an expression in the cell directly to the right
   VariableDefinition(lexeme: String, points_to: #(Int, Int))
 
+  HeaderDefinition(lexeme: String, in: #(Int, Int))
+
   // When labels are placed in such a way they create a table, each cross reference
   // becomes a variable available for use.
   // I'm thinking two labels side by side should be the triggering syntax for this.
@@ -85,7 +88,6 @@ pub fn typecheck(
   // We need to compile statements in a particular order. 
   // When a variable is referenced in a formula (which happens in an expression statement),
   // the cell that variable points to has to be typechecked first.
-
   do_typecheck(statements, init_typechecker_state(), [])
 }
 
@@ -129,6 +131,9 @@ fn do_typecheck(
     [] -> #(acc |> list.reverse, state.collected_errors)
 
     [parser.TableDefinition(_), ..rest] -> todo
+
+    [parser.HeaderDefinition(l, p), ..rest] ->
+      do_typecheck(rest, state, [HeaderDefinition(l, p), ..acc])
 
     // The parser always puts the expression statement for a cell directly before any variable definition pointing to it,
     // so we can simply typecheck the expression statement first then set the variables type to the outcome.

@@ -155,7 +155,10 @@ fn do_eval(
           let assert Ok(value) = dict.get(vm_state.cell_vals, points_to)
           vm_state
           |> define_var(lexeme, value)
-          |> set_cell(#(points_to.0, points_to.1 - 1), IdentValue(lexeme))
+        }
+
+        chunkify.DefineHeader(lexeme:, in:) -> {
+          vm_state |> set_cell(in, IdentValue(lexeme))
         }
 
         chunkify.PushBool(value:) -> vm_state |> push(BooleanValue(value))
