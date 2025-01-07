@@ -85,7 +85,6 @@ pub type TypeError {
 pub fn typecheck(
   statements: List(parser.Statement),
 ) -> #(List(TypedStatement), List(TypeError)) {
-
   // We need to compile statements in a particular order. 
   // When a variable is referenced in a formula (which happens in an expression statement),
   // the cell that variable points to has to be typechecked first.
@@ -101,12 +100,15 @@ type TypeCheckerState {
     // A dictionary of statements to typechecks keyed by the variable they're waiting to know
     // the type of.
     waiting_on: dict.Dict(String, List(parser.Statement)),
+
+    cell_defs: dict.Dict(#(Int, Int), Typ)
   )
 }
 
 fn init_typechecker_state() -> TypeCheckerState {
   TypeCheckerState(
     collected_errors: [],
+    cell_defs: dict.new(),
     variable_defs: dict.new(),
     waiting_on: dict.new(),
   )
@@ -117,7 +119,6 @@ fn do_typecheck(
   state: TypeCheckerState,
   acc: List(TypedStatement),
 ) -> #(List(TypedStatement), List(TypeError)) {
-
   // A shorthand for producing an error without adding any statements to the accumulator
   let error = fn(rest: List(parser.Statement), tet: TypeErrorType) {
     let new_state =
@@ -132,56 +133,40 @@ fn do_typecheck(
     // Base Case: No more statements to typecheck.
     [] -> #(acc |> list.reverse, state.collected_errors)
 
-    [parser.TableDefinition(_), ..rest] -> todo
-
     [parser.HeaderDefinition(l, p), ..rest] ->
       do_typecheck(rest, state, [HeaderDefinition(l, p), ..acc])
 
+    [parser.VariableDefinition(lexeme:, points_to:), ..rest] -> {
+      // Set the variable type to whatever the cell evaluated to
+      let assert Ok(t) = dict.get(state.cell_defs, points_to)
+      let state = TypeCheckerState(..state, variable_defs: dict.insert(state.variable_defs, lexeme, t))
+      // if anything was waiting on the variable, add it back to the stack
+      let rest = case dict.get(state.waiting_on, lexeme) {
+        // Nothing was waiting on it
+        Error(_) -> rest
+
+        // Some things were waiting on it
+        Ok(stmts) -> list.append(stmts, rest)
+      }
+
+      do_typecheck(rest, state, [VariableDefinition(lexeme:, points_to:), ..acc])
+    }
+
     // The parser always puts the expression statement for a cell directly before any variable definition pointing to it,
     // so we can simply typecheck the expression statement first then set the variables type to the outcome.
-    [
-      parser.ExpressionStatement(inner:, sets:),
-      parser.VariableDefinition(lexeme:, points_to:),
-      ..rest
-    ] -> {
+    [parser.ExpressionStatement(inner:, sets:), ..rest] -> {
       case typecheck_expression(inner, state) {
         // If the expression statement doesn't typecheck, report the error and reset the typechecker
         Done(Error(e)) -> error(rest, e)
         Done(Ok(te)) -> {
-          let acc = [
-            VariableDefinition(lexeme:, points_to:),
-            ExpressionStatement(inner: te, sets:),
-            ..acc
-          ]
-          let state =
-            TypeCheckerState(
-              ..state,
-              variable_defs: dict.insert(state.variable_defs, lexeme, te.type_),
-            )
-
-          // If any statements were waiting on the variable, we should push them back on the stack to be processed
-          let #(rest, state) = case dict.get(state.waiting_on, lexeme) {
-            // Nothing waiting on it, go ahead and continue
-            Error(_) -> #(rest, state)
-
-            // Some stmts were waiting on it
-            Ok(stmts) -> #(
-              list.append(stmts, rest),
-              TypeCheckerState(
-                ..state,
-                waiting_on: dict.insert(state.waiting_on, lexeme, []),
-              ),
-            )
-          }
+          let acc = [ExpressionStatement(inner: te, sets:), ..acc]
+          let state = TypeCheckerState(..state, cell_defs: dict.insert(state.cell_defs, sets, te.type_))
 
           do_typecheck(rest, state, acc)
         }
         DependsOnTypeOf(l) -> {
           // Register that this statement depends on the type of this variable
-          let new_waiting_on = [
-            parser.ExpressionStatement(inner:, sets:),
-            parser.VariableDefinition(lexeme:, points_to:),
-          ]
+          let new_waiting_on = [parser.ExpressionStatement(inner:, sets:)]
           let waiting_on = case dict.get(state.waiting_on, l) {
             Error(Nil) -> dict.insert(state.waiting_on, l, new_waiting_on)
             Ok(lst) ->
@@ -193,37 +178,6 @@ fn do_typecheck(
         }
       }
     }
-
-    // And expression statement with no variable definition directly following it.
-    // I could see case where this should really produce a warning, like "hey you produce
-    // a value but don't bother giving it a name."
-    [parser.ExpressionStatement(inner:, sets:), ..rest] -> {
-      case typecheck_expression(inner, state) {
-        // If the expression statement doesn't typecheck, report the error and reset the typechecker
-        Done(Error(e)) -> error(rest, e)
-        Done(Ok(te)) ->
-          do_typecheck(rest, state, [
-            ExpressionStatement(inner: te, sets:),
-            ..acc
-          ])
-        DependsOnTypeOf(l) -> {
-          // Register that this statement depends on the type of this variable
-          let new_state =
-            TypeCheckerState(
-              ..state,
-              waiting_on: dict.insert(state.waiting_on, l, [
-                parser.ExpressionStatement(inner:, sets:),
-              ]),
-            )
-          do_typecheck(rest, new_state, acc)
-        }
-      }
-    }
-
-    [_, ..] -> {
-      panic as "Idk what to do here, I wasn't expecting this comination of statements."
-    }
-    // "Statements" themselves don't have types. We simply need to typecheck the expressions held within any statements
   }
 }
 

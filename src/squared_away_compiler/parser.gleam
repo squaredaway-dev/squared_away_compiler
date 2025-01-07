@@ -9,6 +9,7 @@ import gleam/int
 import gleam/io
 import gleam/list
 import gleam/option
+import gleam/order
 import gleam/result
 import squared_away_compiler/rational
 import squared_away_compiler/scanner
@@ -21,13 +22,6 @@ pub type Statement {
   // We need to produce a statement for this so the vm knows to set the cell
   // to the ident value without making the lexeme useable as a variable.
   HeaderDefinition(lexeme: String, in: #(Int, Int))
-
-  // When labels are placed in such a way they create a table, each cross reference
-  // becomes a variable available for use.
-  // I'm thinking two labels side by side should be the triggering syntax for this.
-  // Might also implicitly define keys based on the row number and column name for 
-  // relative referencing.
-  TableDefinition(inner: dict.Dict(String, #(Int, Int)))
 
   // A cell simply evaluates to it's contents. This is a statement because it
   // needs to have a "side effect" in the vm of setting the cells value.
@@ -91,7 +85,23 @@ fn error(state: ParseState, type_: ParseErrorType, span: Span) -> ParseState {
 }
 
 pub fn parse(toks: List(scanner.Token)) -> #(List(Statement), List(ParseError)) {
-  do_parse(toks, init_state(), [])
+  let #(stmts, errors) = do_parse(toks, init_state(), [])
+
+  // sort the statements so that a variable definition for a given cell always comes right after the 
+  // expression statement for that cell.
+  let compare_stmts = fn(a: Statement, b: Statement) -> order.Order {
+    case a, b {
+      VariableDefinition(_, points_to:), ExpressionStatement(_, sets:)
+        if points_to == sets
+      -> order.Gt
+      ExpressionStatement(_, sets:), VariableDefinition(_, points_to:)
+        if sets == points_to
+      -> order.Lt
+      _, _ -> order.Eq
+    }
+  }
+
+  #(list.sort(stmts, compare_stmts), errors)
 }
 
 fn do_parse(
@@ -482,10 +492,6 @@ fn fast_forward_past_next_comma_or_newline(
 const statement_delimeters = [scanner.Comma, scanner.Newline]
 
 const binary_operators = [
-  scanner.Plus,
-  scanner.Minus,
-  scanner.Star,
-  scanner.StarStar,
-  scanner.Slash,
+  scanner.Plus, scanner.Minus, scanner.Star, scanner.StarStar, scanner.Slash,
   scanner.BangEqual,
 ]

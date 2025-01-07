@@ -120,6 +120,9 @@ fn do_scan(
     // BASE CASE: Done scanning, return the accumulator.
     "" -> Ok(acc |> list.reverse)
 
+    // Ignore whitespace
+    " " <> rest -> do_scan(rest, state, acc)
+
     // Double Character Tokens (we need to match these before single character tokens)
     "!=" <> rest -> match(rest, "!=", BangEqual)
     "==" <> rest -> match(rest, "==", EqualEqual)
