@@ -84,4 +84,9 @@ pub fn table_test() {
     ",,foo,bar,,\n,baz,7,8,,\n,=baz_foo,=baz_bar,,,,",
     ",,foo,bar\n,baz,7,8\n,7,8,\n",
   )
+
+  assert_successful_csv(
+    ",,,NormalRow,7,,,\n,foo,bar,baz,,,,\na,1,2,3,,,,\nb,4,5,6,,,,\n,,=b_bar,,,,,",
+    ",,,NormalRow,7,,,\n,foo,bar,baz,,,,\na,1,2,3,,,,\nb,4,5,6,,,,\n,,5,,,,,"
+  )
 }

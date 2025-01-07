@@ -85,6 +85,7 @@ pub type TypeError {
 pub fn typecheck(
   statements: List(parser.Statement),
 ) -> #(List(TypedStatement), List(TypeError)) {
+
   // We need to compile statements in a particular order. 
   // When a variable is referenced in a formula (which happens in an expression statement),
   // the cell that variable points to has to be typechecked first.
@@ -116,6 +117,7 @@ fn do_typecheck(
   state: TypeCheckerState,
   acc: List(TypedStatement),
 ) -> #(List(TypedStatement), List(TypeError)) {
+
   // A shorthand for producing an error without adding any statements to the accumulator
   let error = fn(rest: List(parser.Statement), tet: TypeErrorType) {
     let new_state =
