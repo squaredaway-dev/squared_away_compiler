@@ -365,22 +365,19 @@ fn chunkify_expression(te: typechecker.TypedExpression) -> List(Operation) {
 
     // Expressions
     typechecker.BinaryOp(type_, op:, lhs:, rhs:) -> {
+      let do = fn(operation) {
+        let lhs_ops = chunkify_expression(lhs)
+        let rhs_ops = chunkify_expression(rhs)
+        [operation, ..lhs_ops] |> list.append(rhs_ops)
+      }
+
       case op.type_, lhs.type_, rhs.type_ {
-        scanner.Star, typechecker.IntegerType, typechecker.IntegerType -> {
-          let lhs_ops = chunkify_expression(lhs)
-          let rhs_ops = chunkify_expression(rhs)
-          [MultiplyInts, ..lhs_ops] |> list.append(rhs_ops)
-        }
-        scanner.Star, typechecker.FloatType, typechecker.FloatType -> {
-          let lhs_ops = chunkify_expression(lhs)
-          let rhs_ops = chunkify_expression(rhs)
-          [MultiplyFloats, ..lhs_ops] |> list.append(rhs_ops)
-        }
-        scanner.Star, typechecker.PercentType, typechecker.PercentType -> {
-          let lhs_ops = chunkify_expression(lhs)
-          let rhs_ops = chunkify_expression(rhs)
-          [MultiplyPercents, ..lhs_ops] |> list.append(rhs_ops)
-        }
+        scanner.Star, typechecker.IntegerType, typechecker.IntegerType ->
+          do(MultiplyInts)
+        scanner.Star, typechecker.FloatType, typechecker.FloatType ->
+          do(MultiplyFloats)
+        scanner.Star, typechecker.PercentType, typechecker.PercentType ->
+          do(MultiplyPercents)
         _, _, _ -> todo
       }
     }

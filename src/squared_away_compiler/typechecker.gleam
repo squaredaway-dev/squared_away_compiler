@@ -100,8 +100,7 @@ type TypeCheckerState {
     // A dictionary of statements to typechecks keyed by the variable they're waiting to know
     // the type of.
     waiting_on: dict.Dict(String, List(parser.Statement)),
-
-    cell_defs: dict.Dict(#(Int, Int), Typ)
+    cell_defs: dict.Dict(#(Int, Int), Typ),
   )
 }
 
@@ -139,7 +138,11 @@ fn do_typecheck(
     [parser.VariableDefinition(lexeme:, points_to:), ..rest] -> {
       // Set the variable type to whatever the cell evaluated to
       let assert Ok(t) = dict.get(state.cell_defs, points_to)
-      let state = TypeCheckerState(..state, variable_defs: dict.insert(state.variable_defs, lexeme, t))
+      let state =
+        TypeCheckerState(
+          ..state,
+          variable_defs: dict.insert(state.variable_defs, lexeme, t),
+        )
       // if anything was waiting on the variable, add it back to the stack
       let rest = case dict.get(state.waiting_on, lexeme) {
         // Nothing was waiting on it
@@ -160,7 +163,11 @@ fn do_typecheck(
         Done(Error(e)) -> error(rest, e)
         Done(Ok(te)) -> {
           let acc = [ExpressionStatement(inner: te, sets:), ..acc]
-          let state = TypeCheckerState(..state, cell_defs: dict.insert(state.cell_defs, sets, te.type_))
+          let state =
+            TypeCheckerState(
+              ..state,
+              cell_defs: dict.insert(state.cell_defs, sets, te.type_),
+            )
 
           do_typecheck(rest, state, acc)
         }
