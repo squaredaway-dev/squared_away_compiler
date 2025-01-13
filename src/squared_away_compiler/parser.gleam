@@ -70,11 +70,18 @@ type ParseState {
   ParseState(
     collected_errors: List(ParseError),
     waiting_on_cells: dict.Dict(#(Int, Int), List(String)),
+    // Track cells which ar epart of tables, and if a cell in a table
+    // gets a value put in it, create the accompanying variable definition
+    in_table_cells: dict.Dict(#(Int, Int), String),
   )
 }
 
 fn init_state() -> ParseState {
-  ParseState(collected_errors: [], waiting_on_cells: dict.new())
+  ParseState(
+    collected_errors: [],
+    waiting_on_cells: dict.new(),
+    in_table_cells: dict.new(),
+  )
 }
 
 fn error(state: ParseState, type_: ParseErrorType, span: Span) -> ParseState {
@@ -85,7 +92,26 @@ fn error(state: ParseState, type_: ParseErrorType, span: Span) -> ParseState {
 }
 
 pub fn parse(toks: List(scanner.Token)) -> #(List(Statement), List(ParseError)) {
-  let #(stmts, errors) = do_parse(toks, init_state(), [])
+  let #(stmts, errors, state) = do_parse(toks, init_state(), [])
+  io.debug(stmts)
+
+  // Any expression statements in tables with variables associated with them still need 
+  // variable definitions
+  let stmts =
+    list.fold(stmts, [], fn(acc, stmt) {
+      case stmt {
+        ExpressionStatement(_, sets:) -> {
+          io.debug(sets)
+          io.debug(state.in_table_cells)
+          case dict.get(state.in_table_cells, sets) {
+            Error(Nil) -> [stmt, ..acc]
+            Ok(lexeme) -> [VariableDefinition(lexeme, sets), stmt, ..acc]
+          }
+        }
+        _ -> [stmt, ..acc]
+      }
+    })
+    |> list.reverse
 
   // sort the statements so that a variable definition for a given cell always comes right after the 
   // expression statement for that cell.
@@ -108,10 +134,10 @@ fn do_parse(
   toks: List(scanner.Token),
   state: ParseState,
   acc: List(Statement),
-) -> #(List(Statement), List(ParseError)) {
+) -> #(List(Statement), List(ParseError), ParseState) {
   case toks {
     // Base Case: Done Parsing
-    [] -> #(acc, state.collected_errors)
+    [] -> #(acc, state.collected_errors, state)
 
     [leading_token, ..rest] -> {
       // We do this here so we can track the span of what we're parsing
@@ -181,26 +207,36 @@ fn do_parse(
           case dict.get(state.waiting_on_cells, #(row, col - 1)) {
             Ok(headers) -> {
               io.debug(headers)
-              // We need to declare variables for every upcoming header
-              let variables =
-                list.index_map(headers, fn(h, i) {
+              // We *may* need to declare variables for every upcoming header.
+              // Register the cells has having variables associated with them
+              // so if they're set to a value they get a variable definition too.
+              let state =
+                list.index_fold(headers, state, fn(acc, h, i) {
                   let l = lexeme <> "_" <> h
                   let points_to = #(row, col + i)
-                  VariableDefinition(l, points_to)
+                  ParseState(
+                    ..acc,
+                    in_table_cells: dict.insert(
+                      acc.in_table_cells,
+                      points_to,
+                      l,
+                    ),
+                  )
                 })
+
+              io.debug(state.in_table_cells)
 
               // The tables needs to be waiting on the next cell down now
               let new_waiting_on =
                 dict.delete(state.waiting_on_cells, #(row, col - 1))
                 |> dict.insert(#(row + 1, col - 1), headers)
 
+              io.debug(rest)
+
               do_parse(
                 rest,
                 ParseState(..state, waiting_on_cells: new_waiting_on),
-                list.append(variables, [
-                  HeaderDefinition(lexeme, #(row, col - 1)),
-                  ..acc
-                ]),
+                [HeaderDefinition(lexeme, #(row, col - 1)), ..acc],
               )
             }
 

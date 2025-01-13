@@ -65,9 +65,6 @@ pub fn compile(src: String) -> CompilerOutput {
       ])
     Ok(scanned) -> {
       let #(stmts, parse_errors) = parser.parse(scanned)
-      io.debug(parse_errors)
-      io.debug(stmts)
-      io.debug("\n---------------------------------\n")
       let #(typed_stmts, type_errors) = typechecker.typecheck(stmts)
       let bytecode = chunkify.chunkify(typed_stmts)
       CompilerOutput(

@@ -65,3 +65,54 @@ foo,1.23
 "
   expect_success(src_and_output)
 }
+
+pub fn filled_table_test() {
+  let src_and_output =
+    ",,,,,
+,,,,,
+,foo,bar,,,
+baz,4,6,,,
+quux,8,9,,,
+,,,,=baz_bar,
+,=quux_foo,,,,
+,,,,,
+,,,,,
+,,,,,
+
+-----
+,,,,
+,,,,
+,foo,bar,,
+baz,4,6,,
+quux,8,9,,
+,,,,6
+,8,,,
+"
+  expect_success(src_and_output)
+}
+
+pub fn table_with_three_out_of_four_test() {
+  let src_and_output =
+    ",,,,,
+,,,,,
+,foo,bar,,,
+baz,,6,,,
+quux,8,9,,,
+,,,,=baz_bar,
+,,=quux_bar,,,
+,,=quux_foo,,,
+,,,,,
+,,,,,
+
+-----
+,,,,
+,,,,
+,foo,bar,,
+baz,,6,,
+quux,8,9,,
+,,,,6
+,,9,,
+,,8,,
+"
+  expect_success(src_and_output)
+}
