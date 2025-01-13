@@ -364,7 +364,7 @@ fn chunkify_expression(te: typechecker.TypedExpression) -> List(Operation) {
     typechecker.Variable(_, lexeme:) -> [PushVariable(lexeme:)]
 
     // Expressions
-    typechecker.BinaryOp(type_, op:, lhs:, rhs:) -> {
+    typechecker.BinaryOp(_, op:, lhs:, rhs:) -> {
       let do = fn(operation) {
         let lhs_ops = chunkify_expression(lhs)
         let rhs_ops = chunkify_expression(rhs)
@@ -372,6 +372,7 @@ fn chunkify_expression(te: typechecker.TypedExpression) -> List(Operation) {
       }
 
       case op.type_, lhs.type_, rhs.type_ {
+        // Multiplication
         scanner.Star, typechecker.IntegerType, typechecker.IntegerType ->
           do(MultiplyInts)
         scanner.Star, typechecker.FloatType, typechecker.FloatType ->

@@ -78,10 +78,10 @@ fn init_state() -> ParseState {
 }
 
 fn error(state: ParseState, type_: ParseErrorType, span: Span) -> ParseState {
-  ParseState(
-    ..state,
-    collected_errors: [ParseError(span:, type_:), ..state.collected_errors],
-  )
+  ParseState(..state, collected_errors: [
+    ParseError(span:, type_:),
+    ..state.collected_errors
+  ])
 }
 
 pub fn parse(toks: List(scanner.Token)) -> #(List(Statement), List(ParseError)) {
@@ -180,6 +180,7 @@ fn do_parse(
         ->
           case dict.get(state.waiting_on_cells, #(row, col - 1)) {
             Ok(headers) -> {
+              io.debug(headers)
               // We need to declare variables for every upcoming header
               let variables =
                 list.index_map(headers, fn(h, i) {
@@ -492,6 +493,11 @@ fn fast_forward_past_next_comma_or_newline(
 const statement_delimeters = [scanner.Comma, scanner.Newline]
 
 const binary_operators = [
-  scanner.Plus, scanner.Minus, scanner.Star, scanner.StarStar, scanner.Slash,
+  scanner.Plus,
+  scanner.Minus,
+  scanner.Star,
+  scanner.StarStar,
+  scanner.Slash,
   scanner.BangEqual,
+  scanner.EqualEqual,
 ]

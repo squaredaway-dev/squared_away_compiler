@@ -121,10 +121,10 @@ fn do_typecheck(
   // A shorthand for producing an error without adding any statements to the accumulator
   let error = fn(rest: List(parser.Statement), tet: TypeErrorType) {
     let new_state =
-      TypeCheckerState(
-        ..state,
-        collected_errors: [TypeError(type_: tet), ..state.collected_errors],
-      )
+      TypeCheckerState(..state, collected_errors: [
+        TypeError(type_: tet),
+        ..state.collected_errors
+      ])
     do_typecheck(rest, new_state, acc)
   }
 

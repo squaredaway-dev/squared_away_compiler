@@ -79,9 +79,9 @@ fn unsafe_pop(vm_state: VmState) -> #(Value, VmState) {
   #(v, VmState(..vm_state, stack: rest))
 }
 
-pub fn vm_state_to_csv(state: VmState) -> BitArray {
+pub fn dict_to_csv(input: dict.Dict(#(Int, Int), String)) -> BitArray {
   // Build a csv from the cell values
-  let keys = dict.keys(state.cell_vals)
+  let keys = dict.keys(input)
 
   let rows =
     list.map(keys, pair.first)
@@ -104,14 +104,14 @@ pub fn vm_state_to_csv(state: VmState) -> BitArray {
             False -> ","
           }
 
-          case dict.get(state.cell_vals, #(row, col)) {
+          case dict.get(input, #(row, col)) {
             // No output for this cell, append a comma or newline
             Error(_) -> bytes_tree.append(csv_row_acc, <<delim:utf8>>)
 
             // There's a value for this cell, add it and then add a comma
             Ok(v) -> {
               csv_row_acc
-              |> bytes_tree.append(<<value_to_string(v):utf8>>)
+              |> bytes_tree.append(<<v:utf8>>)
               |> bytes_tree.append(<<delim:utf8>>)
             }
           }
@@ -122,6 +122,12 @@ pub fn vm_state_to_csv(state: VmState) -> BitArray {
     })
 
   csv_bytes |> bytes_tree.to_bit_array
+}
+
+pub fn vm_state_to_csv(state: VmState) -> BitArray {
+  dict_to_csv(
+    state.cell_vals |> dict.map_values(fn(_, v) { value_to_string(v) }),
+  )
 }
 
 pub fn vm_state_to_json(state: VmState) -> String {

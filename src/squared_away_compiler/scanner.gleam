@@ -59,8 +59,12 @@ pub type TokenType {
 }
 
 const keywords = [
-  #("sum", Sum), #("avg", Avg), #("min", Min), #("max", Max),
-  #("true", TrueLiteral), #("false", FalseLiteral),
+  #("sum", Sum),
+  #("avg", Avg),
+  #("min", Min),
+  #("max", Max),
+  #("true", TrueLiteral),
+  #("false", FalseLiteral),
 ]
 
 pub type Token {
